@@ -15,7 +15,7 @@ public final class Consts {
     ////// **** Constants for Workload Generation **** ///////    
     public static final int AVG_INTERARRIVAL_TIME = 1000; // in ms
     public static final int AVG_INTERDEPARTURE_TIME = 15000; // in ms
-    public static final int NUMBER_OF_VMS = 1000;
+    public static final int NUMBER_OF_VMS = 500;
 
     ////// **** Constants for Agent Platform **** ///////    
 

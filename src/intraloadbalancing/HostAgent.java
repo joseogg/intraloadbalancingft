@@ -1207,7 +1207,7 @@ public class HostAgent extends Agent {
 // ACLMessage msg = (ACLMessage) e.nextElement();
 // (HostDescription)msg.getContentObject()
     private Decision selectHostAgentBasedOnCoalitionUtility(Vector responses, int loadBalancingCause) {
-        Heuristics heuristics = new Heuristics(hostDescription, loadBalancingCause, responses);
+        Heuristics heuristics = new Heuristics(hostDescription, loadBalancingCause, responses, getArguments());
         HostDescription selectedHost = null;
         VirtualMachineDescription selectedVM = null;
 
@@ -1572,7 +1572,7 @@ public class HostAgent extends Agent {
                             decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
                             decision.getSelectedVM().setOwnerId(inform.getSender().getLocalName());
                             operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "AtoB");
-                            if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME && (Consts.LOAD_BALANCING_TYPE == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS))
+                            if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME)
                                 agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
                             resetAverageUsages();
                             resetCounters();
@@ -1841,7 +1841,7 @@ public class HostAgent extends Agent {
                         decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
                         decision.getSelectedVM().setOwnerId(accept.getSender().getLocalName());
                         operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "BtoA");
-                        if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME && (Consts.LOAD_BALANCING_TYPE == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS))
+                        if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME)
                             agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
                         resetAverageUsages();
                         resetCounters();
