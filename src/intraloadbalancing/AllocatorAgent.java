@@ -61,7 +61,7 @@ public class AllocatorAgent extends Agent {
 
         Object[] args = getArguments();
         hosts = (ArrayList<HostDescription>) args[0];
-        hostLeaders = (ArrayList<HostDescription>) args[1];  //Added Joel 2020-06-24
+        hostLeaders = (ArrayList<HostDescription>) args[1];  //Added by Joel 2020-06-24
         if (!Consts.LOG) {
             System.out.println("\n" + hosts + "\n");
         }
@@ -310,9 +310,9 @@ public class AllocatorAgent extends Agent {
                     try {
                         if (host.getVirtualMachinesHosted().get(i) != null)
                             aDeepCopyOfHost.getVirtualMachinesHosted().add(deepCopyVM(host.getVirtualMachinesHosted().get(i)));
-                    } catch (Exception e) {
+                    } catch (Exception ex) {
                         if (Consts.EXCEPTIONS)
-                            e.printStackTrace();
+                            System.out.println(ex);
                     }
                 }
 //                for (VirtualMachineDescription vm : host.getVirtualMachinesHosted()) {  
@@ -567,9 +567,7 @@ public class AllocatorAgent extends Agent {
             this.agt = agt;
             this.loadBalancingCause = loadBalancingCause;
             this.standardDeviation = standardDeviation;
-            this.wakeupTime = (Consts.VMWARE_TIMEOUT_FOR_LOAD_BALANCING < 0
-                    ? Long.MAX_VALUE
-                    : System.currentTimeMillis() + Consts.VMWARE_TIMEOUT_FOR_LOAD_BALANCING);
+            this.wakeupTime = System.currentTimeMillis() + Consts.VMWARE_TIMEOUT_FOR_LOAD_BALANCING;
             decision = new Decision();
         }
 
@@ -579,18 +577,17 @@ public class AllocatorAgent extends Agent {
         }
 
         @Override
-        public void action() {
+        public synchronized void action() {
 
             switch (state) {
                 case 1:
                     try {
-                        ACLMessage msgRequestLockVM = new ACLMessage(ACLMessage.REQUEST);
-                        //System.out.println("This is before the problem ");
                         decision = VMWAREDynamicResourceSchedulerAlgorithm(loadBalancingCause, standardDeviation);
                         //decision = makeCentralizedLoadBalancingDecision(loadBalancingCause);
                         //System.out.println("Decision" +decision);
                         //System.out.println("The decision "+ decision);
                         if (decision.getDecision() != -1) {
+                            ACLMessage msgRequestLockVM = new ACLMessage(ACLMessage.REQUEST);
                             AID to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
                             msgRequestLockVM.setSender(agt.getAID());
                             msgRequestLockVM.addReceiver(to);
@@ -598,11 +595,12 @@ public class AllocatorAgent extends Agent {
                             msgRequestLockVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
                             agt.send(msgRequestLockVM);
                             state++;
+                            wakeupTime = System.currentTimeMillis() + Consts.VMWARE_TIMEOUT_FOR_LOAD_BALANCING;
                         }
                         //System.out.println("HERE I AM 1");
                     } catch (Exception e) {
                         if (Consts.EXCEPTIONS) {
-                            e.printStackTrace();
+                            System.out.println(e);
                         }
                     }
                     break;
@@ -619,7 +617,8 @@ public class AllocatorAgent extends Agent {
                                 msgRequestLockResources.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
                                 msgRequestLockResources.setContentObject((java.io.Serializable) decision.getSelectedVM());
                                 agt.send(msgRequestLockResources);
-                                //System.out.println("HERE I AM 2");                                
+                                //System.out.println("HERE I AM 2");
+                                wakeupTime = System.currentTimeMillis() + Consts.VMWARE_TIMEOUT_FOR_LOAD_BALANCING;
                                 state++;
                             } catch (Exception e) {
                                 if (Consts.EXCEPTIONS) {
@@ -631,7 +630,7 @@ public class AllocatorAgent extends Agent {
                             finished = true;
                             //System.out.println("HERE I AM 3");                                                            
                             if (!Consts.LOG) {
-                                System.out.println("Unable to load balance because source host could not lock the VM selected");
+                                System.out.println("Unable to load balance because source host could not lock the VM selected or it is busy");
                             }
 
                             if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
@@ -641,60 +640,52 @@ public class AllocatorAgent extends Agent {
                             }
                             // I have to unlock the VM at source host
                             try {
-                                ACLMessage msgRequestUnlockVM = new ACLMessage(ACLMessage.REQUEST);
-                                AID to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
-                                msgRequestUnlockVM.setSender(agt.getAID());
-                                msgRequestUnlockVM.addReceiver(to);
-                                msgRequestUnlockVM.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK_VM);
-                                msgRequestUnlockVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                                agt.send(msgRequestUnlockVM);
-                            } catch (IOException ex) {
+                                ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
+                                msgRequestUnlock.setSender(agt.getAID());
+                                msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
+                                msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
+                                agt.send(msgRequestUnlock);
+                            } catch (Exception ex) {
                                 if (Consts.EXCEPTIONS) {
                                     System.out.println(ex);
                                 }
                             }
                         }
-                    }
-                    long dt = wakeupTime - System.currentTimeMillis();
-                    if (dt > 0) {
-                        block(dt);
-                    } else { /// The was not received on time. Then the timeout is triggered
-                        finished = true;
-                        if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
-                            CPUThresholdViolated = false;
-                        } else if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_MEMORY) {
-                            memoryThresholdViolated = false;
-                        }
-                        if (!Consts.LOG) {
-                            System.out.println("The source host agent did not respond and we have to call off the VM migration");
-                        }
-
-                        try {
-                            ACLMessage msgRequestUnlockVM = new ACLMessage(ACLMessage.REQUEST);
-                            AID to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
-                            msgRequestUnlockVM.setSender(agt.getAID());
-                            msgRequestUnlockVM.addReceiver(to);
-                            msgRequestUnlockVM.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK_VM);
-                            msgRequestUnlockVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                            agt.send(msgRequestUnlockVM);
-
-                            // the destination host may have not beee able to respond however it was lock so I had to unlock it.
-                            ACLMessage msgRequestUnlockResources = new ACLMessage(ACLMessage.REQUEST);
-                            to = new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME);
-                            msgRequestUnlockResources.setSender(agt.getAID());
-                            msgRequestUnlockResources.addReceiver(to);
-                            msgRequestUnlockResources.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK_RESOURCES);
-                            msgRequestUnlockResources.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                            agt.send(msgRequestUnlockResources);
-                            //System.out.println("HERE I AM 7");
-
-                        } catch (IOException ex) {
-                            if (Consts.EXCEPTIONS) {
-                                System.out.println(ex);
+                    } else {
+                        long dt = wakeupTime - System.currentTimeMillis();
+                        if (dt > 0) {
+                            block(dt);
+                            return;
+                        } else { /// The message was not received on time. Then the timeout is triggered
+                            finished = true;
+                            if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
+                                CPUThresholdViolated = false;
+                            } else if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_MEMORY) {
+                                memoryThresholdViolated = false;
                             }
-                        }
+                            if (!Consts.LOG) {
+                                System.out.println("The source host agent did not respond and we have to call off the VM migration");
+                            }
 
-                        //System.out.println("HERE I AM 4");                                                        
+                            try {
+                                ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
+                                msgRequestUnlock.setSender(agt.getAID());
+                                msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.addReceiver(new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
+                                msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
+                                agt.send(msgRequestUnlock);
+                                //System.out.println("HERE I AM 7");
+
+                            } catch (Exception ex) {
+                                if (Consts.EXCEPTIONS) {
+                                    System.out.println(ex);
+                                }
+                            }
+
+                            //System.out.println("HERE I AM 4");
+                        }
                     }
                     break;
 
@@ -703,13 +694,13 @@ public class AllocatorAgent extends Agent {
                     if (msgResultLockResources != null) { // if the message is received on time
                         if (msgResultLockResources.getPerformative() == ACLMessage.CONFIRM) {
                             try {
-                                ACLMessage msgMigratieVM = new ACLMessage(ACLMessage.REQUEST);
+                                ACLMessage msgMigrateVM = new ACLMessage(ACLMessage.REQUEST);
                                 AID to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
-                                msgMigratieVM.setSender(agt.getAID());
-                                msgMigratieVM.addReceiver(to);
-                                msgMigratieVM.setConversationId(Consts.VMWARE_CONVERSATION_CONFIRM_MIGRATION);
-                                msgMigratieVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                                agt.send(msgMigratieVM);
+                                msgMigrateVM.setSender(agt.getAID());
+                                msgMigrateVM.addReceiver(to);
+                                msgMigrateVM.setConversationId(Consts.VMWARE_CONVERSATION_CONFIRM_MIGRATION);
+                                msgMigrateVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
+                                agt.send(msgMigrateVM);
                                 //System.out.println("HERE I AM 5");                                        
                                 if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
                                     CPUThresholdViolated = false;
@@ -724,7 +715,7 @@ public class AllocatorAgent extends Agent {
                         } else if (msgResultLockResources.getPerformative() == ACLMessage.FAILURE) {
                             finished = true;
                             if (!Consts.LOG) {
-                                System.out.println("Unable to load balance because destination host could not lock sufficient resources");
+                                System.out.println("Unable to load balance because destination host could not lock sufficient resources or it is busy");
                             }
                             if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
                                 CPUThresholdViolated = false;
@@ -733,64 +724,55 @@ public class AllocatorAgent extends Agent {
                             }
                             // I have to unlock the VM at source host
                             try {
-                                ACLMessage msgRequestUnlockVM = new ACLMessage(ACLMessage.REQUEST);
-                                AID to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
-                                msgRequestUnlockVM.setSender(agt.getAID());
-                                msgRequestUnlockVM.addReceiver(to);
-                                msgRequestUnlockVM.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK_VM);
-                                msgRequestUnlockVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                                agt.send(msgRequestUnlockVM);
+                                ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
+                                msgRequestUnlock.setSender(agt.getAID());
+                                msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.addReceiver(new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
+                                msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
+                                agt.send(msgRequestUnlock);
                                 //System.out.println("HERE I AM 6");                                                                                                                        
-                            } catch (IOException ex) {
+                            } catch (Exception ex) {
                                 if (Consts.EXCEPTIONS) {
-                                    java.util.logging.Logger.getLogger(AllocatorAgent.class.getName()).log(Level.SEVERE, null, ex);
+                                    System.out.println(ex);
                                 }
                             }
-
                         }
                         finished = true; // finish the behaviour either way (failure or confirm)
-                    }
-                    dt = wakeupTime - System.currentTimeMillis();
-                    if (dt > 0) {
-                        block(dt);
-                    } else { /// The was not received on time. Then the timeout is triggered
-                        finished = true;
-                        if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
-                            CPUThresholdViolated = false;
-                        } else if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_MEMORY) {
-                            memoryThresholdViolated = false;
-                        }
-                        if (!Consts.LOG) {
-                            System.out.println("The source destination host did not respond and we have to call off the VM migration");
-                        }
-                        try {
+                    } else {
+                        long dt = wakeupTime - System.currentTimeMillis();
+                        if (dt > 0) {
+                            block(dt);
+                            return;
+                        } else { /// The was not received on time. Then the timeout is triggered
+                            finished = true;
+                            if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU) {
+                                CPUThresholdViolated = false;
+                            } else if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_MEMORY) {
+                                memoryThresholdViolated = false;
+                            }
+                            if (!Consts.LOG) {
+                                System.out.println("The source destination host did not respond and we have to call off the VM migration");
+                            }
+                            try {
 
-                            // I have to unlock both Resources at the destionatio host and the vm at the source host.
-                            ACLMessage msgRequestUnlockResources = new ACLMessage(ACLMessage.REQUEST);
-                            AID to = new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME);
-                            msgRequestUnlockResources.setSender(agt.getAID());
-                            msgRequestUnlockResources.addReceiver(to);
-                            msgRequestUnlockResources.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK_RESOURCES);
-                            msgRequestUnlockResources.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                            agt.send(msgRequestUnlockResources);
-                            //System.out.println("HERE I AM 7");      
-
-                            ACLMessage msgRequestUnlockVM = new ACLMessage(ACLMessage.REQUEST);
-                            to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
-                            msgRequestUnlockVM.setSender(agt.getAID());
-                            msgRequestUnlockVM.addReceiver(to);
-                            msgRequestUnlockVM.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK_VM);
-                            msgRequestUnlockVM.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                            agt.send(msgRequestUnlockVM);
-                            //System.out.println("HERE I AM 6");                                                                                                                        
+                                // I have to unlock both Resources at the destionatio host and the vm at the source host.
+                                ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
+                                msgRequestUnlock.setSender(agt.getAID());
+                                msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.addReceiver(new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME));
+                                msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
+                                msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
+                                agt.send(msgRequestUnlock);
+                                //System.out.println("HERE I AM 6");
 
 
-                        } catch (IOException ex) {
-                            if (Consts.EXCEPTIONS) {
-                                java.util.logging.Logger.getLogger(AllocatorAgent.class.getName()).log(Level.SEVERE, null, ex);
+                            } catch (Exception ex) {
+                                if (Consts.EXCEPTIONS) {
+                                    System.out.println(ex);
+                                }
                             }
                         }
-
                     }
                     break;
             }
@@ -816,39 +798,33 @@ public class AllocatorAgent extends Agent {
             }
             try {
                 Object content = msg.getContentObject();
-                if (msg.getPerformative() == ACLMessage.REQUEST) {
-                    if (content instanceof VirtualMachineDescription) {
 
-                        VirtualMachineDescription vm = (VirtualMachineDescription) content;
-                        conversationId++;
+                VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                conversationId++;
 
-                        if (firstArrival) {
-                            firstArrival = false;
-                            if (Consts.LOG) {
-                                addBehaviour(new Logger(agt));
-                            }
-                        }
-
-                        vm.setConversationId(agt.getLocalName() + String.valueOf(conversationId));
-                        //System.out.println(vm);
-
-                        // Verifying whether there is a host with available cores to host the new VM                    
-                        ArrayList<HostDescription> availableHosts = new ArrayList<>(hosts);
-                        Predicate<HostDescription> condition = hostDescription -> vm.getMemory() > hostDescription.getAvailableMemory() || vm.getNumberOfVirtualCores() > hostDescription.getAvailableVirtualCores();
-                        availableHosts.removeIf(condition);
-
-                        if ((availableHosts.size() > 0)) { // If the VM can be hosted in the Datacenter
-                            HostDescription randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
-                            //System.out.println(randomlySelectedHost.getId());
-                            agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
-                            //agt.addBehaviour(new virtualMachineAllocator(agt, "HostAgent0", vm)); // Allocate VM to a host selected at random.
-                        } else {
-                            // behavior that keeps trying to allocate the VM
-                            agt.addBehaviour(new PeriodicallyAttemptingToAllocateVM(agt, Consts.PERIOD_FOR_PERIODICALLY_ATTEMPTING_TO_ALLOCATE_VM, vm));
-                        }
-
+                if (firstArrival) {
+                    firstArrival = false;
+                    if (Consts.LOG) {
+                        addBehaviour(new Logger(agt));
                     }
                 }
+
+                vm.setConversationId(agt.getLocalName() + String.valueOf(conversationId));
+
+                // Verifying whether there is a host with available cores to host the new VM
+                ArrayList<HostDescription> availableHosts = new ArrayList<>(hosts);
+                Predicate<HostDescription> condition = hostDescription -> vm.getMemory() > hostDescription.getAvailableMemory() || vm.getNumberOfVirtualCores() > hostDescription.getAvailableVirtualCores();
+                availableHosts.removeIf(condition);
+
+                if ((availableHosts.size() > 0)) { // If the VM can be hosted in the Datacenter
+                    HostDescription randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
+                    agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
+                } else {
+                    // behavior that keeps trying to allocate the VM
+                    agt.addBehaviour(new PeriodicallyAttemptingToAllocateVM(agt, Consts.PERIOD_FOR_PERIODICALLY_ATTEMPTING_TO_ALLOCATE_VM, vm));
+                }
+
+
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println(ex);
@@ -878,7 +854,6 @@ public class AllocatorAgent extends Agent {
                 if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                     if (!possiblyCompromisedHosts.contains(selectedHost))
                         possiblyCompromisedHosts.add(selectedHost); // add the selectedHost to the possibly compromised hosts that are not available to host a VM because of a concurrent initial VM allocation 
-//                    System.out.println("At virtualMachineAllocator -> \n"+possiblyCompromisedHosts);                    
                 }
 
                 ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
@@ -891,7 +866,7 @@ public class AllocatorAgent extends Agent {
                 msg.setContentObject((java.io.Serializable) vm);
                 agt.send(msg);
                 agt.addBehaviour(new ReceiverAck(agt, vm)); // I added the conversation id to listen for that specific message
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println(ex);
                 }
@@ -918,19 +893,11 @@ public class AllocatorAgent extends Agent {
             ACLMessage msg = receive(mt);
             if (msg != null) {
 
-                ////////////////////// WORKING ON //////////////////////  BEGIN
-                ////////////////////// WORKING ON //////////////////////  BEGIN
-                ////////////////////// WORKING ON //////////////////////  BEGIN
                 if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                     Predicate<HostDescription> condition = hostDescription -> hostDescription.getId().equals(msg.getSender().getLocalName());
                     possiblyCompromisedHosts.removeIf(condition);
-//                    System.out.println("At receiverAck -> \n"+possiblyCompromisedHosts);
-                    //remove the host from the possibly compromised hosts that are not available to host a VM because of a concurrent initial VM allocation 
                 }
 
-                ////////////////////// WORKING ON //////////////////////  END
-                ////////////////////// WORKING ON //////////////////////  END
-                ////////////////////// WORKING ON //////////////////////  END
                 if (msg.getPerformative() == ACLMessage.INFORM) {
                     if (!Consts.LOG) {
                         System.out.println(agt.getLocalName() + " received a successful response about VM allocation from agent " + msg.getSender().getName());
@@ -1004,13 +971,11 @@ public class AllocatorAgent extends Agent {
             }
             try {
                 Object content = msg.getContentObject();
-                if (msg.getPerformative() == ACLMessage.INFORM) {
-                    if (content instanceof HostDescription) {
-                        HostDescription hostDescription = (HostDescription) content;
-                        updateHostsResourceConsumption(hostDescription);
-                        allocatorAgentGUI.updateServersMonitorList();
-                    }
-                }
+
+                HostDescription hostDescription = (HostDescription) content;
+                updateHostsResourceConsumption(hostDescription);
+                allocatorAgentGUI.updateServersMonitorList();
+
 
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {

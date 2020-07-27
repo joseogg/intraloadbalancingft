@@ -63,6 +63,11 @@ public class VirtualMachineAgent extends Agent {
         addBehaviour(new RegisterWithNewOwner(this));
     }
 
+    @Override
+    protected void takeDown() {
+        //System.out.println( virtualMachineDescription.getId()+ "'s departure");
+    }
+
     protected void setVirtualMachineDescripton(VirtualMachineDescription virtualMachine) {
         this.virtualMachineDescription = virtualMachine;
     }
@@ -124,7 +129,8 @@ public class VirtualMachineAgent extends Agent {
                     send(msg);
                 }
             } catch (Exception e) {
-                if (!Consts.EXCEPTIONS) System.out.println(e);
+                if (Consts.EXCEPTIONS)
+                    System.out.println("Hey 11"+e);
             }
         }
 
@@ -151,7 +157,8 @@ public class VirtualMachineAgent extends Agent {
                 if (!Consts.LOG)
                     System.out.println(agt.getAID().getLocalName() + " sent message to " + virtualMachineDescription.getOwnerId() + " for registration");
             } catch (Exception e) {
-                if (!Consts.EXCEPTIONS) System.out.println(e);
+                if (Consts.EXCEPTIONS)
+                    System.out.println("hey 13" +e);
             }
 
         }
@@ -189,7 +196,8 @@ public class VirtualMachineAgent extends Agent {
                     agt.doMove(new ContainerID(vm.getContainerName().trim(), null));
                 }
             } catch (Exception ex) {
-                if (!Consts.EXCEPTIONS) System.out.println(ex);
+                if (Consts.EXCEPTIONS)
+                    System.out.println("Hey 14"+ex);
             }
         }
     }

@@ -27,6 +27,8 @@ import com.tinkerpop.blueprints.Graph;
  */
 public class IntraLoadBalancing {
 
+
+
     // Creating coalitions
     private static ArrayList<String> createCoalitionFor(String hostId, ArrayList<HashSet<String>> setCoalitions) {
         hostId = hostId.replaceAll("HostAgent", "");
@@ -54,21 +56,34 @@ public class IntraLoadBalancing {
     public static void main(String[] args) {
 
 
+
         try {
 
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
             String fileSufix = "";
+            int initialPort = 2000;
             if (args != null) {
                 if (args.length > 0) {
                     fileSufix = args[0];
                 }
+                if (args.length > 1) {
+                    initialPort = Integer.valueOf(args[1]);
+                }
             }
+
+
             if (Consts.LOG_TO_FILE) {
                 PrintStream outputFile = new PrintStream("./output" + fileSufix + ".txt"); // I should customize filename so as to we can automize experiments 
                 System.setOut(outputFile);
             }
+
+            final int STARTING_PORT = initialPort;
+            final int MAIN_BASIC_SERVICES_CONTAINER_PORT = STARTING_PORT+0;
+            final int ALLOCATOR_CONTAINER_PORT = STARTING_PORT+1;
+            final int WORKLOAD_GENERATOR_CONTAINER_PORT = STARTING_PORT+2;
+            final int STARTING_PORT_NUMBER_FOR_HOSTS = STARTING_PORT+3;
 
             LogManager.getLogManager().reset();
 
@@ -128,19 +143,19 @@ public class IntraLoadBalancing {
             jade.core.ProfileImpl workloadGeneratorProfile;
 
             // creating JADE runtimes' profiles
-            mainBasicServicesProfile = new jade.core.ProfileImpl("localhost", Consts.MAIN_BASIC_SERVICES_CONTAINER_PORT, "Testbed", true);
+            mainBasicServicesProfile = new jade.core.ProfileImpl("localhost", MAIN_BASIC_SERVICES_CONTAINER_PORT, "Testbed", true);
             mainBasicServicesProfile.setParameter("jade _core_messaging_MessageManager_maxqueuesize", "90000000");  // so container can handle a lot of messages                                   
 
-            allocatorContainerProfile = new jade.core.ProfileImpl("localhost", Consts.ALLOCATOR_CONTAINER_PORT, "Testbed", false);
+            allocatorContainerProfile = new jade.core.ProfileImpl("localhost", ALLOCATOR_CONTAINER_PORT, "Testbed", false);
             allocatorContainerProfile.setParameter("jade _core_messaging_MessageManager_maxqueuesize", "90000000");  // so container can handle a lot of messages                  
 
-            workloadGeneratorProfile = new jade.core.ProfileImpl("localhost", Consts.WORKLOAD_GENERATOR_CONTAINER_PORT, "Testbed", false);
+            workloadGeneratorProfile = new jade.core.ProfileImpl("localhost", WORKLOAD_GENERATOR_CONTAINER_PORT, "Testbed", false);
             workloadGeneratorProfile.setParameter("jade _core_messaging_MessageManager_maxqueuesize", "90000000");  // so the container can handle a lot of messages                  
 
             // creating containers' profiles 
             for (int i = 0; i < graphStructure.getHosts().size(); i++) {
                 //hostProfiles[i] = new jade.core.ProfileImpl("localhost", Consts.STARTING_PORT_NUMER_FOR_HOSTS + i, "HostContainer" + String.valueOf(i), false);
-                hostProfiles[i] = new jade.core.ProfileImpl("localhost", Consts.STARTING_PORT_NUMER_FOR_HOSTS + i, "Testbed", false);
+                hostProfiles[i] = new jade.core.ProfileImpl("localhost", STARTING_PORT_NUMBER_FOR_HOSTS + i, "Testbed", false);
                 hostProfiles[i].setParameter("jade _core_messaging_MessageManager_maxqueuesize", "90000000");  // so the container can handle a lot of messages                  
             }
 
@@ -206,7 +221,7 @@ public class IntraLoadBalancing {
 
         } catch (Exception ex) {
             if (Consts.EXCEPTIONS) {
-                Logger.getLogger(IntraLoadBalancing.class.getName()).log(Level.SEVERE, null, ex);
+                System.out.println(ex);
             }
         }
     }
