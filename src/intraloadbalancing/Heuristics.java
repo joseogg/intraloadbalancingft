@@ -142,7 +142,7 @@ public class Heuristics {
                     continue;
                 sum += getUsage(participantHost, hostB, vm);
             } catch (UnreadableException ex) {
-                System.out.println(ex);
+
                 Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
@@ -161,7 +161,7 @@ public class Heuristics {
                     continue;
                 sum += Math.pow(getUsage(participantHost, hostB, vm) - mean, 2);
             } catch (UnreadableException ex) {
-                System.out.println(ex);
+
                 Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
@@ -195,7 +195,7 @@ public class Heuristics {
                     sum += participantHost.getMemory();
                 }
             } catch (UnreadableException ex) {
-                System.out.println(ex);
+
                 Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
@@ -280,7 +280,7 @@ public class Heuristics {
                     }
                 }
             } catch (UnreadableException ex) {
-                System.out.println(ex);
+
                 Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
@@ -370,7 +370,7 @@ public class Heuristics {
 
             }
         } catch (UnreadableException ex) {
-            System.out.println(ex);
+
             Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
         }
 
@@ -394,7 +394,7 @@ public class Heuristics {
             }
 
         } catch (UnreadableException ex) {
-            System.out.println(ex);
+
             Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
         }
         double val, max_val = 0.0;
@@ -430,7 +430,7 @@ public class Heuristics {
                 }
             }
         } catch (Exception ex) {
-            System.out.println(ex);
+
             Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
         }
 

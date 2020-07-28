@@ -954,25 +954,25 @@ public class HostAgent extends Agent {
                         }
 
                         // verifying wheather any counter cause a vm migration from this host agent or other host agent from the same coalition
-                        if ((thresholdViolationCounterForHighCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_CPU) && (!hostDescription.isInProgress())) {
+                        if ((thresholdViolationCounterForHighCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_CPU) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             highCPUThresholdViolated = true;
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU));
-                        } else if ((thresholdViolationCounterForHighMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_MEMORY) && (!hostDescription.isInProgress())) {
+                        } else if ((thresholdViolationCounterForHighMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             highMemoryThresholdViolated = true;
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY));
-                        } else if ((thresholdViolationCounterForLowCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_CPU) && (!hostDescription.isInProgress())) {
+                        } else if ((thresholdViolationCounterForLowCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_CPU) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             lowCPUThresholdViolated = true;
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU));
-                        } else if ((thresholdViolationCounterForLowMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY) && (!hostDescription.isInProgress())) {
+                        } else if ((thresholdViolationCounterForLowMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
@@ -1000,28 +1000,28 @@ public class HostAgent extends Agent {
                             double averageCPUUsage = totalCPUUsage / (double) lastCPUUsages.length; // average CPU usage within a time window
                             double averageMemoryUsage = totalMemoryUsage / (double) lastMemoryUsages.length; // average Memory usage within a time window
                             //System.out.println("*********** "+ averageCPUUsage+ " "+ hostDescription.getHighMigrationThresholdForCPU());                            
-                            if ((averageCPUUsage > hostDescription.getHighMigrationThresholdForCPU()) && (hostDescription.getVirtualMachinesHosted().size() > 0) && (!hostDescription.isInProgress())) {
+                            if ((averageCPUUsage > hostDescription.getHighMigrationThresholdForCPU()) && (hostDescription.getVirtualMachinesHosted().size() > 0) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
                                 resetCounters();// unique
                                 resetAverageUsages();
                                 highCPUThresholdViolated = true;
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU));
-                            } else if ((averageMemoryUsage > hostDescription.getHighMigrationThresholdForMemory()) && (hostDescription.getVirtualMachinesHosted().size() > 0) && (!hostDescription.isInProgress())) {
+                            } else if ((averageMemoryUsage > hostDescription.getHighMigrationThresholdForMemory())  && Consts.BALANCE_MEMORY  && (hostDescription.getVirtualMachinesHosted().size() > 0) && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
                                 resetCounters();// unique
                                 resetAverageUsages();
                                 highMemoryThresholdViolated = true;
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY));
-                            } else if ((averageCPUUsage < hostDescription.getLowMigrationThresholdForCPU()) && (!hostDescription.isInProgress())) {
+                            } else if ((averageCPUUsage < hostDescription.getLowMigrationThresholdForCPU())  && Consts.BALANCE_CPU &&  (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
                                 resetCounters();// unique
                                 resetAverageUsages();
                                 lowCPUThresholdViolated = true;
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU));
-                            } else if ((averageMemoryUsage < hostDescription.getLowMigrationThresholdForMemory()) && (!hostDescription.isInProgress())) {
+                            } else if ((averageMemoryUsage < hostDescription.getLowMigrationThresholdForMemory()) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
                                 resetCounters();// unique

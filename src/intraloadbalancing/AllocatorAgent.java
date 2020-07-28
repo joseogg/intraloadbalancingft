@@ -583,9 +583,6 @@ public class AllocatorAgent extends Agent {
                 case 1:
                     try {
                         decision = VMWAREDynamicResourceSchedulerAlgorithm(loadBalancingCause, standardDeviation);
-                        //decision = makeCentralizedLoadBalancingDecision(loadBalancingCause);
-                        //System.out.println("Decision" +decision);
-                        //System.out.println("The decision "+ decision);
                         if (decision.getDecision() != -1) {
                             ACLMessage msgRequestLockVM = new ACLMessage(ACLMessage.REQUEST);
                             AID to = new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME);
@@ -638,19 +635,6 @@ public class AllocatorAgent extends Agent {
                             } else if (loadBalancingCause == Consts.MIGRATION_CAUSE_VMWARE_JUST_MEMORY) {
                                 memoryThresholdViolated = false;
                             }
-                            // I have to unlock the VM at source host
-                            try {
-                                ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
-                                msgRequestUnlock.setSender(agt.getAID());
-                                msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
-                                msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
-                                msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
-                                agt.send(msgRequestUnlock);
-                            } catch (Exception ex) {
-                                if (Consts.EXCEPTIONS) {
-                                    System.out.println(ex);
-                                }
-                            }
                         }
                     } else {
                         long dt = wakeupTime - System.currentTimeMillis();
@@ -672,7 +656,6 @@ public class AllocatorAgent extends Agent {
                                 ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
                                 msgRequestUnlock.setSender(agt.getAID());
                                 msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
-                                msgRequestUnlock.addReceiver(new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME));
                                 msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
                                 msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
                                 agt.send(msgRequestUnlock);
@@ -727,7 +710,6 @@ public class AllocatorAgent extends Agent {
                                 ACLMessage msgRequestUnlock = new ACLMessage(ACLMessage.REQUEST);
                                 msgRequestUnlock.setSender(agt.getAID());
                                 msgRequestUnlock.addReceiver(new AID(decision.getSourceHost().getId(), AID.ISLOCALNAME));
-                                msgRequestUnlock.addReceiver(new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME));
                                 msgRequestUnlock.setConversationId(Consts.VMWARE_CONVERSATION_UNLOCK);
                                 msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
                                 agt.send(msgRequestUnlock);
@@ -765,8 +747,6 @@ public class AllocatorAgent extends Agent {
                                 msgRequestUnlock.setContentObject((java.io.Serializable) decision.getSelectedVM());
                                 agt.send(msgRequestUnlock);
                                 //System.out.println("HERE I AM 6");
-
-
                             } catch (Exception ex) {
                                 if (Consts.EXCEPTIONS) {
                                     System.out.println(ex);

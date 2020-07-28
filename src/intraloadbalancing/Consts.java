@@ -21,9 +21,9 @@ public final class Consts {
 
     public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
     public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
-    public static final int LOAD_BALANCING_TYPE = VMWARE_CENTRALIZED_WITH_NO_COALITIONS;
+    public static final int LOAD_BALANCING_TYPE = INTRA_DISTRIBUTED_FIXED_COALITIONS;
 
-    public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = false;
+    public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = true;
 
     public static final int MIGRATION_TRIGGER_BASED_ON_COUNTERS = 0; // how many times a given resource usage has violated a threshold within a moving time window
     public static final int MIGRATION_TRIGGER_BASED_ON_AVERAGE_USAGE = 1; // average resource usage above/below  threshold within a moving time window
@@ -44,7 +44,7 @@ public final class Consts {
     // When comparing VMware against our work, VMWARE_TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE == HOST_TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE
 
 
-    public static final int VMWARE_MAX_MIGRATIONS = 100;
+    public static final int VMWARE_MAX_MIGRATIONS = 1;
     public static final boolean VMWARE_BALANCE_CPU_LOAD = true;
     public static final boolean VMWARE_BALANCE_MEMORY_LOAD = false;
 
@@ -82,6 +82,9 @@ public final class Consts {
     public static final int MIGRATION_THRESHOLD_FOR_HIGH_CPU = TARGET_STD_DEV; // from 0 to 100 %
     public static final int MIGRATION_THRESHOLD_FOR_LOW_MEMORY = 0; // from 0 to 100 %
     public static final int MIGRATION_THRESHOLD_FOR_HIGH_MEMORY = TARGET_STD_DEV; // from 0 to 100 %
+
+    public static final boolean BALANCE_CPU = true;
+    public static final boolean BALANCE_MEMORY = false;
 
     //from 16 cores to 224 cores
     // from 32 GiBs to 24 TiB 
