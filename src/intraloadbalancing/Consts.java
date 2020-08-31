@@ -10,18 +10,26 @@ package intraloadbalancing;
  */
 public final class Consts {
 
-    public static final int TARGET_STD_DEV = 10;
-
+    public static final int TARGET_STD_DEV = 6;
     ////// **** Constants for Workload Generation **** ///////    
-    public static final int AVG_INTERARRIVAL_TIME = 1000; // in ms
-    public static final int AVG_INTERDEPARTURE_TIME = 15000; // in ms
-    public static final int NUMBER_OF_VMS = 1000;
+    public static final int AVG_INTERARRIVAL_TIME = 50; // in ms
+    public static final int AVG_INTERDEPARTURE_TIME = 25000; // in ms
+    public static final int NUMBER_OF_VMS = 1620;
+
+//    public static final int AVG_INTERDEPARTURE_TIME = 20000; // in ms
+//    public static final int NUMBER_OF_VMS = 20000;
+
+//    public static final int AVG_INTERDEPARTURE_TIME = 25000; // in ms
+//    public static final int NUMBER_OF_VMS = 30000;
+
+//    public static final int AVG_INTERDEPARTURE_TIME = 600000; // in ms
+//    public static final int NUMBER_OF_VMS = 10000;
 
     ////// **** Constants for Agent Platform **** ///////    
 
     public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
     public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
-    public static final int LOAD_BALANCING_TYPE = INTRA_DISTRIBUTED_FIXED_COALITIONS;
+    public static final int LOAD_BALANCING_TYPE = VMWARE_CENTRALIZED_WITH_NO_COALITIONS;
 
     public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = true;
 
@@ -29,7 +37,7 @@ public final class Consts {
     public static final int MIGRATION_TRIGGER_BASED_ON_AVERAGE_USAGE = 1; // average resource usage above/below  threshold within a moving time window
     public static final int MIGRATION_TRIGGER_TYPE = MIGRATION_TRIGGER_BASED_ON_AVERAGE_USAGE;
     public static final long HOST_REPORTING_RATE = 1000; // in ms
-    public static final long RANGE_OF_RANDOM_TICKS = HOST_REPORTING_RATE / 10; // This is to prevent Host Agents from initiating CNPs at the same time.
+    public static final long RANGE_OF_RANDOM_TICKS = HOST_REPORTING_RATE / 2; // This is to prevent Host Agents from initiating CNPs at the same time.
 
 
     public static final long LOGGING_RATE = 1000; // in ms
@@ -44,7 +52,7 @@ public final class Consts {
     // When comparing VMware against our work, VMWARE_TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE == HOST_TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE
 
 
-    public static final int VMWARE_MAX_MIGRATIONS = 1;
+    public static final int VMWARE_MAX_MIGRATIONS = 10000;
     public static final boolean VMWARE_BALANCE_CPU_LOAD = true;
     public static final boolean VMWARE_BALANCE_MEMORY_LOAD = false;
 
@@ -70,8 +78,8 @@ public final class Consts {
     public static final int MIGRATION_CAUSE_VMWARE_JUST_MEMORY = 5; // This is for VMWARE load balancing
 
 
-    public static final int TIMEOUT_FOR_CNP_INITIATOR_FOR_VM_MIGRATION = 100;
-    public static final int TIMEOUT_FOR_CNP_INITIATOR_FOR_LOAD_BALANCING = 200;
+    public static final int TIMEOUT_FOR_CNP_INITIATOR_FOR_VM_MIGRATION = 150;
+    public static final int TIMEOUT_FOR_CNP_INITIATOR_FOR_LOAD_BALANCING = 300;
 
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_CPU = 10;
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_MEMORY = 100000;

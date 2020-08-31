@@ -9,22 +9,14 @@ import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
 import jade.core.behaviours.OneShotBehaviour;
-import jade.core.behaviours.ParallelBehaviour;
-import jade.core.behaviours.SequentialBehaviour;
 import jade.core.behaviours.SimpleBehaviour;
 import jade.core.behaviours.TickerBehaviour;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
-import jade.lang.acl.UnreadableException;
-
-import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.Random;
-import java.util.Vector;
 import java.util.function.Predicate;
-import java.util.logging.Level;
 
 /**
  * @author octavio
@@ -82,6 +74,11 @@ public class AllocatorAgent extends Agent {
         private double[] lastCPUStdDev;
         private double[] lastMemoryStdDev;
         private int numberOfContinuousMigrations;
+        private int consecutiveEqualLogs;
+        private String previousBalancingMetric;
+        private DecimalFormat df;
+        private String balancingMetric;
+        private long time;
 
         public Logger(Agent agt) {
             super(agt, Consts.LOGGING_RATE);
@@ -90,20 +87,31 @@ public class AllocatorAgent extends Agent {
             numberOfContinuousMigrations = 0;
             lastCPUStdDev = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
             lastMemoryStdDev = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
+            consecutiveEqualLogs=0;
+            previousBalancingMetric="";
+            df = new DecimalFormat("0.##");
+            balancingMetric ="";
+            time=0;
+        }
+
+        @Override
+        public int onEnd() {
+            System.exit(1);
+            return 0;
         }
 
         @Override
         protected void onTick() {
 
             //System.out.println("At TICKER -> \n"+possiblyCompromisedHosts);                    
-            long time = System.currentTimeMillis();
-            DecimalFormat df = new DecimalFormat("0.##");
-            String balancing_metric = "";
-            balancing_metric += "{\"dataCenterCPUMean\":" + df.format(mean("cpu", hosts, -1)) + ", ";
-            balancing_metric += "\"dataCenterCPUStdDev\":" + df.format(stdDev("cpu", hosts, -1)) + ", ";
-            balancing_metric += "\"dataCenterMemoryMean\":" + df.format(mean("memory", hosts, -1)) + ", ";
-            balancing_metric += "\"dataCenterMemoryStdDev\":" + df.format(stdDev("memory", hosts, -1)) + ", ";
-            balancing_metric += "\"coalitions\": [";
+            time = System.currentTimeMillis();
+
+            balancingMetric = "";
+            balancingMetric += "{\"dataCenterCPUMean\":" + df.format(mean("cpu", hosts, -1)) + ", ";
+            balancingMetric += "\"dataCenterCPUStdDev\":" + df.format(stdDev("cpu", hosts, -1)) + ", ";
+            balancingMetric += "\"dataCenterMemoryMean\":" + df.format(mean("memory", hosts, -1)) + ", ";
+            balancingMetric += "\"dataCenterMemoryStdDev\":" + df.format(stdDev("memory", hosts, -1)) + ", ";
+            balancingMetric += "\"coalitions\": [";
 
 //            for (int i = 0; i < Consts.NUMBER_OF_COALITIONS; i++) {
 //                balancing_metric += "{\"id\":" + i + ", ";
@@ -117,23 +125,34 @@ public class AllocatorAgent extends Agent {
 //            }
 
             for (int i = 0; i < hostLeaders.size(); i++) {
-                balancing_metric += "{\"id\":" + hostLeaders.get(i).getCoalition() + ", ";
-                balancing_metric += "\"CPUMean\":" + df.format(mean("cpu", hosts, hostLeaders.get(i).getCoalition())) + ", ";
-                balancing_metric += "\"CPUStdDev\":" + df.format(stdDev("cpu", hosts, hostLeaders.get(i).getCoalition())) + ", ";
-                balancing_metric += "\"memoryMean\":" + df.format(mean("memory", hosts, hostLeaders.get(i).getCoalition())) + ", ";
-                balancing_metric += "\"memoryStdDev\":" + df.format(stdDev("memory", hosts, hostLeaders.get(i).getCoalition())) + "}";
+                balancingMetric += "{\"id\":" + hostLeaders.get(i).getCoalition() + ", ";
+                balancingMetric += "\"CPUMean\":" + df.format(mean("cpu", hosts, hostLeaders.get(i).getCoalition())) + ", ";
+                balancingMetric += "\"CPUStdDev\":" + df.format(stdDev("cpu", hosts, hostLeaders.get(i).getCoalition())) + ", ";
+                balancingMetric += "\"memoryMean\":" + df.format(mean("memory", hosts, hostLeaders.get(i).getCoalition())) + ", ";
+                balancingMetric += "\"memoryStdDev\":" + df.format(stdDev("memory", hosts, hostLeaders.get(i).getCoalition())) + "}";
                 if ((i + 1) < hostLeaders.size()) {
-                    balancing_metric += ", ";
+                    balancingMetric += ", ";
                 }
             }
 
 
-            balancing_metric += "], \"time\":" + time + "}";
+            balancingMetric += "], \"time\":" + time + "}";
 
-            if ((mean("cpu", hosts, -1) != 0) && (mean("memory", hosts, -1) != 0)) { // if there is load, then log it.
+            if (!balancingMetric.equals(previousBalancingMetric)){
+                previousBalancingMetric =balancingMetric;
+                consecutiveEqualLogs=0;
+            } else {
+                consecutiveEqualLogs++;
+                if (consecutiveEqualLogs > 300){
+                    System.exit(1);
+                }
+            }
+
+
+            if ((mean("cpu", hosts, -1) != 0) || (mean("memory", hosts, -1) != 0)) { // if there is load, then log it.
                 finalCountDown = 0;
                 if (Consts.LOG) {
-                    System.out.println(balancing_metric);
+                    System.out.println(balancingMetric);
                 }
 
                 if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
@@ -193,11 +212,13 @@ public class AllocatorAgent extends Agent {
                 }
             } else { // if there is no load, then close the program.
                 finalCountDown++;
-                if (finalCountDown > 20 /*ticks*/) {
+                if (finalCountDown > 200 /*ticks*/) {
                     System.exit(0);
                 }
             }
         }
+
+
     }
 
     private double getNumberOfElements(int coalition) {// coalition -1 indicates that all the host should be taken into account
@@ -205,8 +226,8 @@ public class AllocatorAgent extends Agent {
         if (coalition == -1) {
             n = hosts.size();
         } else {
-            for (HostDescription host : hosts) {
-                if (host.getCoalition() == coalition) {
+            for (int i=0; i < hosts.size(); i++) {
+                if (hosts.get(i).getCoalition() == coalition) {
                     n = n + 1;
                 }
             }
@@ -217,18 +238,20 @@ public class AllocatorAgent extends Agent {
     private double mean(String resource, ArrayList<HostDescription> hosts, int coalition) { // coalition -1 indicates that all the hosts should be taken into account
         double sum = 0.0;
         double n = getNumberOfElements(coalition);
-        for (HostDescription host : hosts) {
+
+        for (int i = 0; i < hosts.size(); i++) {
+
             if (resource.toLowerCase().equals("cpu")) {
                 if (coalition == -1) {
-                    sum += host.getCPUUsage();
-                } else if (host.getCoalition() == coalition) {
-                    sum += host.getCPUUsage();
+                    sum += hosts.get(i).getCPUUsage();
+                } else if (hosts.get(i).getCoalition() == coalition) {
+                    sum += hosts.get(i).getCPUUsage();
                 }
             } else if (resource.toLowerCase().equals("memory")) {
                 if (coalition == -1) {
-                    sum += host.getMemoryUsage();
-                } else if (host.getCoalition() == coalition) {
-                    sum += host.getMemoryUsage();
+                    sum += hosts.get(i).getMemoryUsage();
+                } else if (hosts.get(i).getCoalition() == coalition) {
+                    sum += hosts.get(i).getMemoryUsage();
                 }
             }
         }
@@ -240,18 +263,18 @@ public class AllocatorAgent extends Agent {
         double summatory = 0.0;
         double n = getNumberOfElements(coalition);
         double mean = mean(resource, hosts, coalition);
-        for (HostDescription host : hosts) {
+        for (int i = 0; i < hosts.size(); i++) {
             if (resource.toLowerCase().equals("cpu")) {
                 if (coalition == -1) {
-                    summatory += Math.pow(host.getCPUUsage() - mean, 2);
-                } else if (host.getCoalition() == coalition) {
-                    summatory += Math.pow(host.getCPUUsage() - mean, 2);
+                    summatory += Math.pow(hosts.get(i).getCPUUsage() - mean, 2);
+                } else if (hosts.get(i).getCoalition() == coalition) {
+                    summatory += Math.pow(hosts.get(i).getCPUUsage() - mean, 2);
                 }
             } else if (resource.toLowerCase().equals("memory")) {
                 if (coalition == -1) {
-                    summatory += Math.pow(host.getMemoryUsage() - mean, 2);
-                } else if (host.getCoalition() == coalition) {
-                    summatory += Math.pow(host.getMemoryUsage() - mean, 2);
+                    summatory += Math.pow(hosts.get(i).getMemoryUsage() - mean, 2);
+                } else if (hosts.get(i).getCoalition() == coalition) {
+                    summatory += Math.pow(hosts.get(i).getMemoryUsage() - mean, 2);
                 }
             }
         }
@@ -347,18 +370,25 @@ public class AllocatorAgent extends Agent {
     private static HostDescription removeVMfromHost(HostDescription host, String VMIdtoBeRemoved) {
         HostDescription updatedHost = deepCopyHost(host);
         updatedHost.getVirtualMachinesHosted().clear();
+        for (int i=0; i < host.getVirtualMachinesHosted().size(); i++) {
+            if (!host.getVirtualMachinesHosted().get(i).getId().equals(VMIdtoBeRemoved)) {
+                updatedHost.getVirtualMachinesHosted().add(deepCopyVM(host.getVirtualMachinesHosted().get(i)));
+            }
+        }
+/*
         for (VirtualMachineDescription vm : host.getVirtualMachinesHosted()) {
             if (!vm.getId().equals(VMIdtoBeRemoved)) {
                 updatedHost.getVirtualMachinesHosted().add(deepCopyVM(vm));
             }
         }
+*/
         return updatedHost;
     }
 
     private static HostDescription getDeepCopyOfHost(ArrayList<HostDescription> hosts, String hostId) {
-        for (HostDescription host : hosts) {
-            if (host.getId().equals(hostId)) {
-                return deepCopyHost(host);
+        for (int i = 0; i < hosts.size(); i++) {
+            if (hosts.get(i).getId().equals(hostId)) {
+                return deepCopyHost(hosts.get(i));
             }
         }
         return null;
@@ -473,11 +503,16 @@ public class AllocatorAgent extends Agent {
 
         //System.out.println("ERROR 1 " +hosts);
         //System.out.println("ERROR 1.5 " +possiblyCompromisedHosts);
-        for (HostDescription potentialHost : hosts) {
+        for (int i=0; i< hosts.size(); i++) {
+            if (!possiblyCompromisedHosts.contains(hosts.get(i))) {
+                safeHosts.add(hosts.get(i));
+            }
+        }
+/*        for (HostDescription potentialHost : hosts) {
             if (!possiblyCompromisedHosts.contains(potentialHost)) {
                 safeHosts.add(potentialHost);
             }
-        }
+        }*/
         //System.out.println("ERROR 2");
         switch (loadBalancingCause) {
             case Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU:
@@ -485,14 +520,15 @@ public class AllocatorAgent extends Agent {
                 if (safeHosts.size() > 0) {
                     double minCPUUsage = 101;
                     double maxCPUUsage = -1;
-                    for (HostDescription host : safeHosts) {
-                        if (host.getCPUUsage() < minCPUUsage) {
-                            minCPUUsage = host.getCPUUsage();
-                            destinationHost = host;
+                    //for (HostDescription host : safeHosts) {
+                    for (int i=0; i<safeHosts.size(); i++) {
+                        if (safeHosts.get(i).getCPUUsage() < minCPUUsage) {
+                            minCPUUsage = safeHosts.get(i).getCPUUsage();
+                            destinationHost = safeHosts.get(i);
                         }
-                        if (host.getCPUUsage() >= maxCPUUsage) {
-                            maxCPUUsage = host.getCPUUsage();
-                            sourceHost = host;
+                        if (safeHosts.get(i).getCPUUsage() >= maxCPUUsage) {
+                            maxCPUUsage = safeHosts.get(i).getCPUUsage();
+                            sourceHost = safeHosts.get(i);
                         }
                     }
                     //System.out.println("ERROR 4 " + sourceHost);
@@ -519,14 +555,14 @@ public class AllocatorAgent extends Agent {
                     double minMemoryUsage = 101;
                     double maxMemoryUsage = -1;
                     //System.out.println("ERROR 6 " + safeHosts);
-                    for (HostDescription host : safeHosts) {
-                        if (host.getMemoryUsage() < minMemoryUsage) {
-                            minMemoryUsage = host.getMemoryUsage();
-                            destinationHost = host;
+                    for (int i=0; i<safeHosts.size(); i++) {
+                        if (safeHosts.get(i).getMemoryUsage() < minMemoryUsage) {
+                            minMemoryUsage = safeHosts.get(i).getMemoryUsage();
+                            destinationHost = safeHosts.get(i);
                         }
-                        if (host.getMemoryUsage() >= maxMemoryUsage) {
-                            maxMemoryUsage = host.getMemoryUsage();
-                            sourceHost = host;
+                        if (safeHosts.get(i).getMemoryUsage() >= maxMemoryUsage) {
+                            maxMemoryUsage = safeHosts.get(i).getMemoryUsage();
+                            sourceHost = safeHosts.get(i);
                         }
                     }
                     //System.out.println("ERROR 7 " + sourceHost);
@@ -763,6 +799,9 @@ public class AllocatorAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
+        private HostDescription randomlySelectedHost;
 
         public RequestsReceiver(Agent agt) {
             this.agt = agt;
@@ -771,15 +810,14 @@ public class AllocatorAgent extends Agent {
 
         @Override
         public void action() {
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
             }
             try {
-                Object content = msg.getContentObject();
 
-                VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                vm = (VirtualMachineDescription) msg.getContentObject();
                 conversationId++;
 
                 if (firstArrival) {
@@ -797,7 +835,7 @@ public class AllocatorAgent extends Agent {
                 availableHosts.removeIf(condition);
 
                 if ((availableHosts.size() > 0)) { // If the VM can be hosted in the Datacenter
-                    HostDescription randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
+                    randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
                     agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
                 } else {
                     // behavior that keeps trying to allocate the VM
@@ -818,6 +856,7 @@ public class AllocatorAgent extends Agent {
         private Agent agt;
         private VirtualMachineDescription vm;
         private HostDescription selectedHost;
+        private ACLMessage msg;
 
         public virtualMachineAllocator(Agent agt, HostDescription selectedHost, VirtualMachineDescription vm) {
             super(null);
@@ -836,7 +875,7 @@ public class AllocatorAgent extends Agent {
                         possiblyCompromisedHosts.add(selectedHost); // add the selectedHost to the possibly compromised hosts that are not available to host a VM because of a concurrent initial VM allocation 
                 }
 
-                ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
+                msg = new ACLMessage(ACLMessage.REQUEST);
                 AID to = new AID(selectedHost.getId(), AID.ISLOCALNAME);
                 msg.setSender(agt.getAID());
                 msg.addReceiver(to);
@@ -935,6 +974,8 @@ public class AllocatorAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private HostDescription hostDescription;
 
         public MonitorListener(Agent agt) {
             this.agt = agt;
@@ -944,15 +985,15 @@ public class AllocatorAgent extends Agent {
         @Override
         public synchronized void action() {
 
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
             }
             try {
-                Object content = msg.getContentObject();
 
-                HostDescription hostDescription = (HostDescription) content;
+
+                hostDescription = (HostDescription) msg.getContentObject();
                 updateHostsResourceConsumption(hostDescription);
                 allocatorAgentGUI.updateServersMonitorList();
 
@@ -968,9 +1009,15 @@ public class AllocatorAgent extends Agent {
 
     private void updateHostsResourceConsumption(HostDescription hostDescriptionToBeUpdated) {
         try {
-            for (HostDescription hostDescription : hosts) {
-                if (hostDescription.equals(hostDescriptionToBeUpdated)) {
-                    hostDescription = hostDescriptionToBeUpdated;
+
+            for (int i = 0; i< hosts.size(); i++) {
+                if (hosts.get(i).getId().equals(hostDescriptionToBeUpdated.getId())) {
+                    hosts.get(i).setMemoryUsed(hostDescriptionToBeUpdated.getMemoryUsed());
+                    hosts.get(i).setMemoryUsed(hostDescriptionToBeUpdated.getMemory());
+                    hosts.get(i).setNumberOfVirtualCoresUsed(hostDescriptionToBeUpdated.getNumberOfVirtualCoresUsed());
+                    hosts.get(i).setNumberOfVirtualCores(hostDescriptionToBeUpdated.getNumberOfVirtualCores());
+                    hosts.get(i).setCPUUsage(hostDescriptionToBeUpdated.getCPUUsage());
+                    hosts.get(i).setMemoryUsage(hostDescriptionToBeUpdated.getMemoryUsage());
                     break;
                 }
             }

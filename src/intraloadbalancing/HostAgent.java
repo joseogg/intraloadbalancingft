@@ -150,6 +150,9 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage initialMsg;
+        private ACLMessage finalMsg;
+        private AID to;
 
         public LeaderListenerForCounterReset(Agent agt) {
             this.agt = agt;
@@ -158,7 +161,7 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
-            ACLMessage initialMsg = receive(mt);
+            initialMsg = receive(mt);
             if (initialMsg == null) {
                 block();
                 return;
@@ -169,8 +172,8 @@ public class HostAgent extends Agent {
                 //System.out.println(hostDescription.getId()+"- I have to notify my members");
                 // send a message to all coalitions members
 
-                ACLMessage finalMsg = new ACLMessage(ACLMessage.REQUEST);
-                AID to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
+                finalMsg = new ACLMessage(ACLMessage.REQUEST);
+                to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
                 finalMsg.setSender(agt.getAID());
                 for (int i = 0; i < coalitionMembers.size(); i++) { // notify all the leaders (except my own leader) that a coalition has been balanced
                     if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
@@ -194,6 +197,7 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
 
         public MemberListenerForCounterReset(Agent agt) {
             this.agt = agt;
@@ -202,7 +206,7 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
@@ -257,6 +261,8 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
 
         public VMWARE_ListenerForVMMigrations(Agent agt) {
             this.agt = agt;
@@ -266,14 +272,13 @@ public class HostAgent extends Agent {
         @Override
         public void action() {
 
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
             }
             try {
-                Object content = msg.getContentObject();
-                VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                vm = (VirtualMachineDescription) (msg.getContentObject());
                 operationOverVM(vm, "removeAndMigrate", "AtoB");
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
@@ -288,6 +293,9 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
+        private ACLMessage acknowledgementMsg;
 
         public VMWARE_LockResources(Agent agt) {
             this.agt = agt;
@@ -297,7 +305,7 @@ public class HostAgent extends Agent {
         @Override
         public void action() {
 
-                ACLMessage msg = receive(mt);
+                msg = receive(mt);
                 if (msg == null) {
                     hostDescription.setInProgress(false);
                     block();
@@ -307,10 +315,9 @@ public class HostAgent extends Agent {
                     if (!hostDescription.isInProgress()) {
 
                         hostDescription.setInProgress(true);
-                        Object content = msg.getContentObject();
-                        VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                        vm = (VirtualMachineDescription) (msg.getContentObject());
                         if ((vm.getMemory() <= hostDescription.getAvailableMemory()) && (vm.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores())) { // if the host has sufficient resources to allocate the VM
-                            ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.CONFIRM);
+                            acknowledgementMsg = new ACLMessage(ACLMessage.CONFIRM);
                             acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
                             acknowledgementMsg.addReceiver(msg.getSender());
                             acknowledgementMsg.setContent("Success in locking resources for VM migration");
@@ -321,7 +328,7 @@ public class HostAgent extends Agent {
                             //System.out.println("HERE He is 4");
                         } else {
                             hostDescription.setInProgress(false);
-                            ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                            acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                             acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
                             acknowledgementMsg.addReceiver(msg.getSender());
                             acknowledgementMsg.setContent("Failed to lock resources for VM migration due to insufficient resources");
@@ -332,7 +339,7 @@ public class HostAgent extends Agent {
                             //System.out.println("HERE He is 5");
                         }
                     } else { //if it is busy
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Failed to lock resources for VM migration because I'm busy");
@@ -353,6 +360,9 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
+        private ACLMessage acknowledgementMsg;
 
         public VMWARE_LockVM(Agent agt) {
             this.agt = agt;
@@ -362,7 +372,7 @@ public class HostAgent extends Agent {
         @Override
         public void action() {
 
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 hostDescription.setInProgress(false);
                 block();
@@ -371,11 +381,11 @@ public class HostAgent extends Agent {
             try {
                 if (!hostDescription.isInProgress()) {
                     hostDescription.setInProgress(true);
-                    Object content = msg.getContentObject();
-                    VirtualMachineDescription vm = (VirtualMachineDescription) content;
+
+                    vm = (VirtualMachineDescription) (msg.getContentObject());
 
                     if (hostDescription.isVirtualMachineHosted(vm.getId())) {
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.CONFIRM);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.CONFIRM);
                         acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_VM);
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Success in locking the VM");
@@ -383,10 +393,9 @@ public class HostAgent extends Agent {
                         if (!Consts.LOG) {
                             System.out.println("Success in locking the VM");
                         }
-                        //System.out.println("HERE He is 1");
                     } else {
                         hostDescription.setInProgress(false);
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_VM);
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Failed to lock the VM. The VM is not here");
@@ -394,11 +403,10 @@ public class HostAgent extends Agent {
                         if (!Consts.LOG) {
                             System.out.println("Failed to lock the VM. The VM is not here");
                         }
-                        //System.out.println("HERE He is 2");
                     }
 
                 } else { // if in progress, cancel protocol
-                    ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                    acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                     acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_VM);
                     acknowledgementMsg.addReceiver(msg.getSender());
                     acknowledgementMsg.setContent("I'm busy");
@@ -420,6 +428,7 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
 
         public VMWARE_Unlock(Agent agt) {
             this.agt = agt;
@@ -428,7 +437,7 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
@@ -466,6 +475,8 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
 
         public ListenerForVMMigrations(Agent a) {
             this.agt = a;
@@ -474,16 +485,15 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
             } else {
 
                 try {
-                    Object content = msg.getContentObject();
 
-                    VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                    vm = (VirtualMachineDescription) (msg.getContentObject());
                     if (operationOverVM(vm, "migration", null)) { // if it can host the VM
                         if (!Consts.LOG) {
                             System.out.println(hostDescription.getId() + " succesful migration of VM: " + vm);
@@ -526,6 +536,10 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
+        private ACLMessage acknowledgementMsg;
+        private Object[] vmAgentParams;
 
         public RequestsReceiver(Agent agt) {
             this.agt = agt;
@@ -536,7 +550,7 @@ public class HostAgent extends Agent {
         public void action() {
             if (!hostDescription.isInProgress()) {
 
-                ACLMessage msg = receive(mt);
+                msg = receive(mt);
                 if (msg == null) {
                     hostDescription.setInProgress(false);
                     block();
@@ -544,10 +558,9 @@ public class HostAgent extends Agent {
                 }
                 try {
                     hostDescription.setInProgress(true);
-                    Object content = msg.getContentObject();
-                    VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                    vm = (VirtualMachineDescription) (msg.getContentObject());
                     if (operationOverVM(vm, "initialAllocation", null)) { // if it can host the VM
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Successful allocation");
@@ -556,13 +569,13 @@ public class HostAgent extends Agent {
                         }
                         agt.send(acknowledgementMsg);
                         //Create VM agent;
-                        Object[] vmAgentParams = new Object[1];
+                        vmAgentParams = new Object[1];
                         vm.setOwnerId(hostDescription.getId());
                         vmAgentParams[0] = vm;
                         getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancing.VirtualMachineAgent", vmAgentParams);
                         getContainerController().getAgent(String.valueOf(vm.getVirtualMachineId())).start();
                     } else { // it cannot host the vm
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Failed allocation. The server cannot host the VM");
@@ -588,6 +601,10 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
+        private ACLMessage acknowledgementMsg;
+        private Object[] vmAgentParams;
 
         public VMWARE_RemoveAndMigrateVM(Agent agt) {
             this.agt = agt;
@@ -597,7 +614,7 @@ public class HostAgent extends Agent {
         @Override
         public void action() {
             if (!hostDescription.isInProgress()) {
-                ACLMessage msg = receive(mt);
+                msg = receive(mt);
                 if (msg == null) {
                     block();
                     hostDescription.setInProgress(false);
@@ -605,10 +622,9 @@ public class HostAgent extends Agent {
                 }
                 try {
                     hostDescription.setInProgress(true);
-                    Object content = msg.getContentObject();
-                    VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                    vm = (VirtualMachineDescription) (msg.getContentObject());
                     if (operationOverVM(vm, "initialAllocation", null)) { // if it can host the VM
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Successful allocation");
@@ -617,13 +633,13 @@ public class HostAgent extends Agent {
                         }
                         agt.send(acknowledgementMsg);
                         //Create VM agent;
-                        Object[] vmAgentParams = new Object[2];
+                        vmAgentParams = new Object[2];
                         vm.setOwnerId(hostDescription.getId());
                         vmAgentParams[0] = vm;
                         getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancing.VirtualMachineAgent", vmAgentParams);
                         getContainerController().getAgent(String.valueOf(vm.getVirtualMachineId())).start();
                     } else { // it cannot host the vm
-                        ACLMessage acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                        acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
                         acknowledgementMsg.setContent("Failed allocation. The server cannot host the VM");
@@ -647,7 +663,8 @@ public class HostAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
-
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
         public MonitorListener(Agent agt) {
             this.agt = agt;
             this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_MONITOR_VM);
@@ -656,17 +673,15 @@ public class HostAgent extends Agent {
         @Override
         public synchronized void action() {
 
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
             }
             try {
-                Object content = msg.getContentObject();
-                VirtualMachineDescription vm = (VirtualMachineDescription) content;
+                vm = (VirtualMachineDescription) (msg.getContentObject());
                 updateVirtualMachineResourceConsumption(vm);
                 updateHostResourceConsumption();
-
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("It is here 18" + ex);
@@ -678,10 +693,10 @@ public class HostAgent extends Agent {
 
     private void updateVirtualMachineResourceConsumption(VirtualMachineDescription vmDescriptionToBeUpdated) {
         try {
-            for (VirtualMachineDescription vmDescription : hostDescription.getVirtualMachinesHosted()) {
-                if (vmDescription.equals(vmDescriptionToBeUpdated)) {
-                    vmDescription.setCPUUsage(vmDescriptionToBeUpdated.getCPUUsage());
-                    vmDescription.setMemoryUsage(vmDescriptionToBeUpdated.getMemoryUsage());
+            for (int i=0; i<hostDescription.getVirtualMachinesHosted().size(); i++) {
+                if (hostDescription.getVirtualMachinesHosted().get(i).getId().equals(vmDescriptionToBeUpdated.getId())) {
+                    hostDescription.getVirtualMachinesHosted().get(i).setCPUUsage(vmDescriptionToBeUpdated.getCPUUsage());
+                    hostDescription.getVirtualMachinesHosted().get(i).setMemoryUsage(vmDescriptionToBeUpdated.getMemoryUsage());
                     break;
                 }
             }
@@ -698,9 +713,9 @@ public class HostAgent extends Agent {
         double sumCPUUsage = 0;  // percentage
         double memoryUsage = 0;
         double CPUUsage = 0;
-        for (VirtualMachineDescription vmDescription : hostDescription.getVirtualMachinesHosted()) {
-            sumCPUUsage = sumCPUUsage + ((vmDescription.getCPUUsage() / 100) * vmDescription.getNumberOfVirtualCores());
-            sumMemoryUsage = sumMemoryUsage + (vmDescription.getMemoryUsage() / 100) * vmDescription.getMemory();
+        for (int i = 0; i < hostDescription.getVirtualMachinesHosted().size(); i++) {
+            sumCPUUsage = sumCPUUsage + ((hostDescription.getVirtualMachinesHosted().get(i).getCPUUsage() / 100) * hostDescription.getVirtualMachinesHosted().get(i).getNumberOfVirtualCores());
+            sumMemoryUsage = sumMemoryUsage + (hostDescription.getVirtualMachinesHosted().get(i).getMemoryUsage() / 100) * hostDescription.getVirtualMachinesHosted().get(i).getMemory();
         }
         if (hostDescription.getVirtualMachinesHosted().size() > 0) {
             memoryUsage = (100 * sumMemoryUsage) / hostDescription.getMemory();
@@ -908,6 +923,9 @@ public class HostAgent extends Agent {
     private class PerformanceReporterAndThresholdMonitoring extends TickerBehaviour {
 
         private Agent agt;
+        private ACLMessage msg;
+        private double totalCPUUsage = 0;
+        private double totalMemoryUsage = 0;
 
         public PerformanceReporterAndThresholdMonitoring(Agent agt, long period) {
             super(agt, period);
@@ -920,7 +938,7 @@ public class HostAgent extends Agent {
 
             updateHostResourceConsumption();
             try {
-                ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                msg = new ACLMessage(ACLMessage.INFORM);
                 msg.addReceiver(new AID(hostDescription.getAllocatorId(), AID.ISLOCALNAME));
                 msg.setConversationId(Consts.CONVERSATION_MONITOR_HOST);
                 msg.setContentObject((java.io.Serializable) hostDescription);
@@ -989,8 +1007,8 @@ public class HostAgent extends Agent {
 
                         if (currentTick == (Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE - 1)) {
 
-                            double totalCPUUsage = 0;
-                            double totalMemoryUsage = 0;
+                            totalCPUUsage = 0;
+                            totalMemoryUsage = 0;
 
                             for (int i = 0; i < Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE; i++) {
                                 totalCPUUsage += lastCPUUsages[i];
@@ -1053,8 +1071,7 @@ public class HostAgent extends Agent {
     // ACLMessage msg = (ACLMessage) e.nextElement();
     // (HostDescription)msg.getContentObject()
     private double mean(Vector responses, String resource) {
-        Object copy_responses = (Vector) responses.clone();
-        ((Vector) copy_responses).add(null);
+
         double sum = 0.0;
 
         if (resource.toLowerCase().equals("cpu")) { // This is to take into account the resource usage of the INITIATOR host agent 
@@ -1062,12 +1079,10 @@ public class HostAgent extends Agent {
         } else if (resource.toLowerCase().equals("memory")) {
             sum = hostDescription.getMemoryUsage();
         }
-
-        Enumeration participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
-
-        while (participantHosts.hasMoreElements()) {
+        HostDescription participantHost;
+        for (int i=0; i<responses.size(); i++) {
             try {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (resource.toLowerCase().equals("cpu")) {
                     sum += participantHost.getCPUUsage();
                 } else if (resource.toLowerCase().equals("memory")) {
@@ -1093,11 +1108,10 @@ public class HostAgent extends Agent {
         } else if (resource.toLowerCase().equals("memory")) {
             summatory = Math.pow(hostDescription.getMemoryUsage() - mean, 2);
         }
-
-        Enumeration participantHosts = responses.elements();  // responses from all the other (PARTICIPANTS) hosts
-        while (participantHosts.hasMoreElements()) {
+        HostDescription participantHost;
+        for (int i=0; i<responses.size(); i++){
             try {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (resource.toLowerCase().equals("cpu")) {
                     summatory += Math.pow(participantHost.getCPUUsage() - mean, 2);
                 } else if (resource.toLowerCase().equals("memory")) {
@@ -1334,7 +1348,7 @@ public class HostAgent extends Agent {
         private Decision decision;
         private int loadBalancingCause;
         private int numberOfPotentialRespondents;
-
+        private ACLMessage callForProposalsForLoadBalancing;
         public CNPInitiatorForIntraLoadBalancingAtoB(Agent agt, int loadBalancingCause) {
             super(null);
             this.loadBalancingCause = loadBalancingCause;
@@ -1347,7 +1361,7 @@ public class HostAgent extends Agent {
         public void action() {
             try {
 
-                ACLMessage callForProposalsForLoadBalancing = new ACLMessage(ACLMessage.CFP);
+                callForProposalsForLoadBalancing = new ACLMessage(ACLMessage.CFP);
                 for (int i = 0; i < coalitionMembers.size(); i++) {
                     if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
                         callForProposalsForLoadBalancing.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
@@ -1412,8 +1426,6 @@ public class HostAgent extends Agent {
 
                         if (responses.size() > 0) {
                             boolean proposalAccepted = false;
-                            Enumeration e = responses.elements();
-
                             if (responses.size() > 0) {
                                 //////////////////// Simple and random selection of hostAgents. This should be done based on the coalition's utility
                                 decision = selectHostAgentBasedOnCoalitionUtility(responses, loadBalancingCause);
@@ -1437,11 +1449,12 @@ public class HostAgent extends Agent {
                                     if (!Consts.LOG) {
                                         System.out.println("I " + agt.getAID() + " updated his migration thresholds because it initiated A to B CNP ");
                                     }
-
-                                    while (e.hasMoreElements()) {
-                                        ACLMessage msg = (ACLMessage) e.nextElement();
+                                    ACLMessage msg;
+                                    ACLMessage reply;
+                                    for (int i=0; i< responses.size(); i++) {
+                                        msg = (ACLMessage) responses.get(i);
                                         if (msg.getPerformative() == ACLMessage.PROPOSE) {
-                                            ACLMessage reply = msg.createReply();
+                                            reply = msg.createReply();
                                             if (msg.getSender().getLocalName().equals(decision.getDestinationHost().getId())) {
                                                 try {
                                                     reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
@@ -1630,7 +1643,7 @@ public class HostAgent extends Agent {
 
                         if (responses.size() > 0) {
                             boolean proposalAccepted = false;
-                            Enumeration e = responses.elements();
+
 
                             if (responses.size() > 0) {
 
@@ -1659,11 +1672,12 @@ public class HostAgent extends Agent {
                                             System.out.println("I " + agt.getAID() + " updated his migration thresholds because it initiated B to A CNP ");
                                         }
                                     }
-
-                                    while (e.hasMoreElements()) {
-                                        ACLMessage msg = (ACLMessage) e.nextElement();
+                                    ACLMessage msg;
+                                    ACLMessage reply;
+                                    for (int i=0; i<responses.size(); i++){
+                                        msg = (ACLMessage) responses.get(i);
                                         if (msg.getPerformative() == ACLMessage.PROPOSE) {
-                                            ACLMessage reply = msg.createReply();
+                                            reply = msg.createReply();
 
                                             if (msg.getSender().getLocalName().equals(decision.getSourceHost().getId())) {
                                                 try {

@@ -112,6 +112,8 @@ public class VirtualMachineAgent extends Agent {
 
     private class PerformanceReporter extends TickerBehaviour {
 
+        private ACLMessage msg;
+
         public PerformanceReporter(Agent a, long period) {
             super(a, period);
         }
@@ -122,7 +124,7 @@ public class VirtualMachineAgent extends Agent {
 
             try {
                 if (reportToOwner) {
-                    ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                    msg = new ACLMessage(ACLMessage.INFORM);
                     msg.addReceiver(new AID(virtualMachineDescription.getOwnerId(), AID.ISLOCALNAME));
                     msg.setConversationId(Consts.CONVERSATION_MONITOR_VM);
                     msg.setContentObject((java.io.Serializable) virtualMachineDescription);
@@ -169,6 +171,8 @@ public class VirtualMachineAgent extends Agent {
 
         private Agent agt;
         private MessageTemplate mt;
+        private ACLMessage msg;
+        private VirtualMachineDescription vm;
 
         public ListenForMigrationRequests(Agent agt) {
             this.agt = agt;
@@ -178,13 +182,13 @@ public class VirtualMachineAgent extends Agent {
         @Override
         public synchronized void action() {
 
-            ACLMessage msg = receive(mt);
+            msg = receive(mt);
             if (msg == null) {
                 block();
                 return;
             }
             try {
-                VirtualMachineDescription vm = (VirtualMachineDescription) msg.getContentObject();
+                vm = (VirtualMachineDescription) msg.getContentObject();
                 if (msg.getPerformative() == ACLMessage.REQUEST) {
                     virtualMachineDescription.setPreviousOwnerId(vm.getPreviousOwnerId());
                     virtualMachineDescription.setOwnerId(vm.getOwnerId());

@@ -62,23 +62,36 @@ public class IntraLoadBalancing {
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
-            String fileSufix = "";
-            int initialPort = 2000;
+
+            String XML_FILE = "./fat_trees/big_fat_tree_datacenterCoalitions4_1.XML";
+            String fileSufix ="";
+            int initialPort = 30000;
             if (args != null) {
                 if (args.length > 0) {
-                    fileSufix = args[0];
+                    // args 0 : experiment run
+                    // args 1 : datacenter filename
+                    fileSufix = args[0]+ "_"+  args[1] + "_"+
+                            String.valueOf(Consts.AVG_INTERARRIVAL_TIME)+"_" +
+                            String.valueOf(Consts.AVG_INTERDEPARTURE_TIME)+"_" +
+                            String.valueOf(Consts.TARGET_STD_DEV)+"_" +
+                            String.valueOf(Consts.NUMBER_OF_VMS)+"_" +
+                            String.valueOf(Consts.LOAD_BALANCING_TYPE)+"_" +
+                            String.valueOf(Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME);
+
+                    XML_FILE = "./fat_trees/"+args[1];
                 }
-                if (args.length > 1) {
-                    initialPort = Integer.valueOf(args[1]);
-                }
+     //           if (args.length > 1) {
+     //               initialPort = Integer.valueOf(args[1]);
+    //            }
             }
 
-
+            //System.out.println("Hi-1");
             if (Consts.LOG_TO_FILE) {
                 PrintStream outputFile = new PrintStream("./output" + fileSufix + ".txt"); // I should customize filename so as to we can automize experiments 
+                //System.out.println("Hi-0.5");
                 System.setOut(outputFile);
             }
-
+            //System.out.println("Hi0");
             final int STARTING_PORT = initialPort;
             final int MAIN_BASIC_SERVICES_CONTAINER_PORT = STARTING_PORT+0;
             final int ALLOCATOR_CONTAINER_PORT = STARTING_PORT+1;
@@ -93,12 +106,15 @@ public class IntraLoadBalancing {
 
 
             ArrayList<HostAndNeighbors> dataCenterStructure;
-            String XML_FILE = "DCellCoalitionTest.XML";
+            //String XML_FILE = "DCellCoalitionTest.XML";
 
             Graph G;
+
             Graph2Host graphStructure = new Graph2Host(XML_FILE);
 
+
             G = graphStructure.readGraph();
+
             graphStructure.setCoalition2HashTable(G);//determine coalition IDs for Hosts
             graphStructure.createHosts(G);
             ArrayList<HashSet<String>> setCoalitions = graphStructure.getCoalitions();
@@ -125,7 +141,10 @@ public class IntraLoadBalancing {
             jade.core.Runtime serviceContainerRuntime[] = new jade.core.Runtime[graphStructure.getHosts().size()];
             jade.core.Runtime workloadGeneratorContainerRuntime;
 
-            // creating JADE runtime environments 
+            // creating JADE runtime environments
+
+            //System.out.println("Number of Hosts: "+ graphStructure.getHosts().size());
+
             for (int i = 0; i < graphStructure.getHosts().size(); i++) {
                 serviceContainerRuntime[i] = jade.core.Runtime.instance();
             }
@@ -156,7 +175,11 @@ public class IntraLoadBalancing {
             for (int i = 0; i < graphStructure.getHosts().size(); i++) {
                 //hostProfiles[i] = new jade.core.ProfileImpl("localhost", Consts.STARTING_PORT_NUMER_FOR_HOSTS + i, "HostContainer" + String.valueOf(i), false);
                 hostProfiles[i] = new jade.core.ProfileImpl("localhost", STARTING_PORT_NUMBER_FOR_HOSTS + i, "Testbed", false);
-                hostProfiles[i].setParameter("jade _core_messaging_MessageManager_maxqueuesize", "90000000");  // so the container can handle a lot of messages                  
+                //hostProfiles[i].setParameter("jade _core_messaging_MessageManager_maxqueuesize", "90000000");  // so the container can handle a lot of messages
+                //hostProfiles[i].setParameter("jade _core_messaging_MessageManager_poolsize", "10");  // so the container can handle a lot of messages
+
+
+                //jade.core.event.NotificationService
             }
 
             mainBasicServicesContainer = mainBasicServicesContainerRuntime.createMainContainer(mainBasicServicesProfile);
@@ -187,6 +210,7 @@ public class IntraLoadBalancing {
 
             allocatorAgentParams[0] = hostDescriptions;
             allocatorAgentParams[1] = xLeaders; // leaders identifies the coalition members of its own coalition
+            System.out.println("Number of coalitions: "+ xLeaders.size()+ " Total number of hosts: "+ dataCenterStructure.size());
             // Starting allocator agent
             allocatorContainer.createNewAgent("AllocatorAgent", "intraloadbalancing.AllocatorAgent", allocatorAgentParams);
             allocatorContainer.getAgent("AllocatorAgent").start();

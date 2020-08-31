@@ -105,10 +105,10 @@ public class Heuristics {
             }
         }
 
-        for (VirtualMachineDescription vmDescription : hostA.getVirtualMachinesHosted()) { // it emulates that the VM is inside in hostB
-            if (vm == null || !vmDescription.getId().equals(vm.getId())) { // without considering the selected vm
-                sumCPUUsage = sumCPUUsage + ((vmDescription.getCPUUsage() / 100) * vmDescription.getNumberOfVirtualCores());
-                sumMemoryUsage = sumMemoryUsage + (vmDescription.getMemoryUsage() / 100) * vmDescription.getMemory();
+        for (int i=0; i <hostA.getVirtualMachinesHosted().size(); i++) { // it emulates that the VM is inside in hostB
+            if (vm == null || !hostA.getVirtualMachinesHosted().get(i).getId().equals(vm.getId())) { // without considering the selected vm
+                sumCPUUsage = sumCPUUsage + ((hostA.getVirtualMachinesHosted().get(i).getCPUUsage() / 100) * hostA.getVirtualMachinesHosted().get(i).getNumberOfVirtualCores());
+                sumMemoryUsage = sumMemoryUsage + (hostA.getVirtualMachinesHosted().get(i).getMemoryUsage() / 100) * hostA.getVirtualMachinesHosted().get(i).getMemory();
             }
         }
 
@@ -134,10 +134,10 @@ public class Heuristics {
     private double mean(HostDescription hostB, VirtualMachineDescription vm) {
         double sum;
         sum = getUsage(hostDescription, hostB, vm); // This is to take into account the resource usage of the INITIATOR host agent
-        Enumeration participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
-        while (participantHosts.hasMoreElements()) {
+        for (int i=0; i< responses.size(); i++){ // responses from all the other (PARTICIPANT) hosts
+
             try {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (participantHost == null)
                     continue;
                 sum += getUsage(participantHost, hostB, vm);
@@ -153,10 +153,10 @@ public class Heuristics {
     private double stdDev(HostDescription hostB, VirtualMachineDescription vm) {
         double mean = mean(hostB, vm);
         double sum = Math.pow(getUsage(hostDescription, hostB, vm) - mean, 2);
-        Enumeration participantHosts = responses.elements();  // responses from all the other (PARTICIPANTS) hosts
-        while (participantHosts.hasMoreElements()) {
+
+        for (int i=0; i<responses.size(); i++) {// responses from all the other (PARTICIPANTS) hosts
             try {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (participantHost == null)
                     continue;
                 sum += Math.pow(getUsage(participantHost, hostB, vm) - mean, 2);
@@ -183,10 +183,9 @@ public class Heuristics {
         } else if (resource.toLowerCase().equals("memory")) {
             sum += hostDescription.getMemory();
         }
-        Enumeration participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
-        while (participantHosts.hasMoreElements()) {
+        for (int i=0; i<responses.size(); i++) {// responses from all the other (PARTICIPANT) hosts
             try {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (participantHost == null)
                     continue;
                 if (resource.toLowerCase().equals("cpu")) {
@@ -241,21 +240,20 @@ public class Heuristics {
     public void heuristic_exhaustive(){
         double val = 0.0;
         double max_val = val;
-        Enumeration participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
-        while (participantHosts.hasMoreElements()) {
+        for (int i=0; i< responses.size(); i++) {// responses from all the other (PARTICIPANT) hosts
             try {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if(participantHost == null) // ¿porqué a veces ocurre esto?
                     continue;
                 if (protocolType.equals("AtoB")) {
                     if(hostDescription.getVirtualMachinesHosted() != null && hostDescription.getVirtualMachinesHosted().size() > 0) {
-                        for (VirtualMachineDescription vmDescription : hostDescription.getVirtualMachinesHosted()) {
-                            if ((vmDescription.getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && (vmDescription.getMemory() <= participantHost.getAvailableMemory())) // is the vm fit in the proposed host?
+                        for (int j=0; j<hostDescription.getVirtualMachinesHosted().size(); j++) {
+                            if (( hostDescription.getVirtualMachinesHosted().get(j).getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && ( hostDescription.getVirtualMachinesHosted().get(j).getMemory() <= participantHost.getAvailableMemory())) // is the vm fit in the proposed host?
                             {
-                                val = valuation_function(participantHost, vmDescription);
+                                val = valuation_function(participantHost,  hostDescription.getVirtualMachinesHosted().get(j));
                                 if (val > max_val) {
                                     this.selectedHost = participantHost;
-                                    this.selectedVM = vmDescription;
+                                    this.selectedVM =  hostDescription.getVirtualMachinesHosted().get(j);
                                     max_val = val;
                                     this.valuationValue = max_val;
                                 }
@@ -265,13 +263,13 @@ public class Heuristics {
                 }
                 else if (protocolType.equals("BtoA")) {
                     if(participantHost.getVirtualMachinesHosted() != null && participantHost.getVirtualMachinesHosted().size() > 0) {
-                        for (VirtualMachineDescription vmDescription : participantHost.getVirtualMachinesHosted()) {
-                            if ((vmDescription.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (vmDescription.getMemory() <= hostDescription.getAvailableMemory())) // is the proposed vm fit in the host?
+                        for (int j=0; j< participantHost.getVirtualMachinesHosted().size(); j++) {
+                            if ((participantHost.getVirtualMachinesHosted().get(j).getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (participantHost.getVirtualMachinesHosted().get(j).getMemory() <= hostDescription.getAvailableMemory())) // is the proposed vm fit in the host?
                             {
-                                val = valuation_function(hostDescription, vmDescription);
+                                val = valuation_function(hostDescription, participantHost.getVirtualMachinesHosted().get(j));
                                 if (val > max_val) {
                                     this.selectedHost = participantHost;
-                                    this.selectedVM = vmDescription;
+                                    this.selectedVM = participantHost.getVirtualMachinesHosted().get(j);
                                     max_val = val;
                                     this.valuationValue = max_val;
                                 }
@@ -292,10 +290,9 @@ public class Heuristics {
         max_val = val = 0.0;
         double min_val = Double.MAX_VALUE;
         HostDescription participantHost = null;
-        Enumeration participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
-        while (participantHosts.hasMoreElements()) {
+        for (int i=0; i< responses.size(); i++) { // responses from all the other (PARTICIPANT) hosts
             try {
-                participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+                participantHost = (HostDescription) ((ACLMessage)responses.get(i)).getContentObject();
                 if (participantHost == null) // ¿porqué a veces ocurre esto?
                     continue;
                 if (resource.toLowerCase().equals("cpu")) {
@@ -317,12 +314,12 @@ public class Heuristics {
         max_val = 0.0;
         if (protocolType.equals("AtoB")) {
             if (hostDescription.getVirtualMachinesHosted() != null && hostDescription.getVirtualMachinesHosted().size() > 0) {
-                for (VirtualMachineDescription vmDescription : hostDescription.getVirtualMachinesHosted()) {
-                    if ((vmDescription.getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && (vmDescription.getMemory() <= participantHost.getAvailableMemory())) { // is the vm fit in the proposed host?
-                        val = valuation_function(participantHost, vmDescription);
+                for (int i=0; i< hostDescription.getVirtualMachinesHosted().size(); i++) {
+                    if ((hostDescription.getVirtualMachinesHosted().get(i).getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && (hostDescription.getVirtualMachinesHosted().get(i).getMemory() <= participantHost.getAvailableMemory())) { // is the vm fit in the proposed host?
+                        val = valuation_function(participantHost, hostDescription.getVirtualMachinesHosted().get(i));
                         if (val > max_val) {
                             this.selectedHost = participantHost;
-                            this.selectedVM = vmDescription;
+                            this.selectedVM = hostDescription.getVirtualMachinesHosted().get(i);
                             max_val = val;
                             this.valuationValue = max_val;
                         }
@@ -331,12 +328,12 @@ public class Heuristics {
             }
         } else if (protocolType.equals("BtoA")) {
             if(participantHost.getVirtualMachinesHosted() != null && participantHost.getVirtualMachinesHosted().size() > 0) {
-                for (VirtualMachineDescription vmDescription : participantHost.getVirtualMachinesHosted()) {
-                    if ((vmDescription.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (vmDescription.getMemory() <= hostDescription.getAvailableMemory())){ // is the proposed vm fit in the host?
-                        val = valuation_function(hostDescription, vmDescription);
+                for (int i=0; i<participantHost.getVirtualMachinesHosted().size(); i++) {
+                    if ((participantHost.getVirtualMachinesHosted().get(i).getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (participantHost.getVirtualMachinesHosted().get(i).getMemory() <= hostDescription.getAvailableMemory())){ // is the proposed vm fit in the host?
+                        val = valuation_function(hostDescription, participantHost.getVirtualMachinesHosted().get(i));
                         if (val > max_val) {
                             this.selectedHost = participantHost;
-                            this.selectedVM = vmDescription;
+                            this.selectedVM = participantHost.getVirtualMachinesHosted().get(i);
                             max_val = val;
                             this.valuationValue = max_val;
                         }
@@ -355,10 +352,9 @@ public class Heuristics {
 
     public void heuristic_roulette_wheel(){
         double total_sum = 0.0;
-        Enumeration participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
         try {
-            while (participantHosts.hasMoreElements()) {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+            for (int i=0; i<responses.size(); i++ ) {// responses from all the other (PARTICIPANT) hosts
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (participantHost == null)
                     continue;
                 if (resource.toLowerCase().equals("cpu")) {
@@ -374,12 +370,11 @@ public class Heuristics {
             Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
         }
 
-        participantHosts = responses.elements(); // responses from all the other (PARTICIPANT) hosts
         double rand = GetRandomNumber(0, total_sum);
         double partialSum = 0;
         try{
-            while (participantHosts.hasMoreElements()) {
-                HostDescription participantHost = (HostDescription) ((ACLMessage) participantHosts.nextElement()).getContentObject();
+            for (int i=0; i< responses.size(); i++) {// responses from all the other (PARTICIPANT) hosts
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (participantHost == null)
                     continue;
                 if (resource.toLowerCase().equals("cpu")) {
@@ -402,12 +397,12 @@ public class Heuristics {
         try{
             if (protocolType.equals("AtoB")) {
                 if (hostDescription.getVirtualMachinesHosted() != null && hostDescription.getVirtualMachinesHosted().size() > 0) {
-                    for (VirtualMachineDescription vmDescription : hostDescription.getVirtualMachinesHosted()) {
-                        if ((vmDescription.getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && (vmDescription.getMemory() <= participantHost.getAvailableMemory())) { // is the vm fit in the proposed host?
-                            val = valuation_function(participantHost, vmDescription);
+                    for (int i=0; i<hostDescription.getVirtualMachinesHosted().size(); i++) {
+                        if ((hostDescription.getVirtualMachinesHosted().get(i).getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && (hostDescription.getVirtualMachinesHosted().get(i).getMemory() <= participantHost.getAvailableMemory())) { // is the vm fit in the proposed host?
+                            val = valuation_function(participantHost, hostDescription.getVirtualMachinesHosted().get(i));
                             if (val > max_val) {
                                 this.selectedHost = participantHost;
-                                this.selectedVM = vmDescription;
+                                this.selectedVM = hostDescription.getVirtualMachinesHosted().get(i);
                                 max_val = val;
                                 this.valuationValue = max_val;
                             }
@@ -416,12 +411,12 @@ public class Heuristics {
                 }
             } else if (protocolType.equals("BtoA")) {
                 if(participantHost.getVirtualMachinesHosted() != null && participantHost.getVirtualMachinesHosted().size() > 0) {
-                    for (VirtualMachineDescription vmDescription : participantHost.getVirtualMachinesHosted()) {
-                        if ((vmDescription.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (vmDescription.getMemory() <= hostDescription.getAvailableMemory())){ // is the proposed vm fit in the host?
-                            val = valuation_function(hostDescription, vmDescription);
+                    for (int i=0; i< participantHost.getVirtualMachinesHosted().size(); i++) {
+                        if ((participantHost.getVirtualMachinesHosted().get(i).getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (participantHost.getVirtualMachinesHosted().get(i).getMemory() <= hostDescription.getAvailableMemory())){ // is the proposed vm fit in the host?
+                            val = valuation_function(hostDescription, participantHost.getVirtualMachinesHosted().get(i));
                             if (val > max_val) {
                                 this.selectedHost = participantHost;
-                                this.selectedVM = vmDescription;
+                                this.selectedVM = participantHost.getVirtualMachinesHosted().get(i);
                                 max_val = val;
                                 this.valuationValue = max_val;
                             }
