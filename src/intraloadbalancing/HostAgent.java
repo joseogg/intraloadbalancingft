@@ -1173,9 +1173,9 @@ public class HostAgent extends Agent {
          */
         try {
             // the heuristics
-            heuristics.heuristic_exhaustive();
-            //heuristics.heuristic_maxMinHostUsage();
-            //heuristics.heuristic_roulette_wheel();
+            //heuristics.heuristic_exhaustive();
+            heuristics.heuristic_maxMinHostUsage();
+            //heuristics.heuristic_roulette_wheel(); // to be updated
 
             selectedHost = heuristics.getSelectedHost();
             selectedVM = heuristics.getSelectedVM();

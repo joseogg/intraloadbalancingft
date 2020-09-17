@@ -69,6 +69,7 @@ public class AllocatorAgent extends Agent {
     private class Logger extends TickerBehaviour {
 
         private Agent agt;
+        private int logRecords;
         private int currentTick; // this is to keep track of the time window 
         private int finalCountDown = 0; // in ticks
         private double[] lastCPUStdDev;
@@ -92,6 +93,7 @@ public class AllocatorAgent extends Agent {
             df = new DecimalFormat("0.##");
             balancingMetric ="";
             time=0;
+            logRecords=0;
         }
 
         @Override
@@ -153,6 +155,11 @@ public class AllocatorAgent extends Agent {
                 finalCountDown = 0;
                 if (Consts.LOG) {
                     System.out.println(balancingMetric);
+                    logRecords++;
+                    if (logRecords >= Consts.NUMBER_OF_LOG_RECORDS){
+                        System.exit(0);
+                    }
+
                 }
 
                 if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
@@ -1013,7 +1020,7 @@ public class AllocatorAgent extends Agent {
             for (int i = 0; i< hosts.size(); i++) {
                 if (hosts.get(i).getId().equals(hostDescriptionToBeUpdated.getId())) {
                     hosts.get(i).setMemoryUsed(hostDescriptionToBeUpdated.getMemoryUsed());
-                    hosts.get(i).setMemoryUsed(hostDescriptionToBeUpdated.getMemory());
+                    hosts.get(i).setMemory(hostDescriptionToBeUpdated.getMemory());
                     hosts.get(i).setNumberOfVirtualCoresUsed(hostDescriptionToBeUpdated.getNumberOfVirtualCoresUsed());
                     hosts.get(i).setNumberOfVirtualCores(hostDescriptionToBeUpdated.getNumberOfVirtualCores());
                     hosts.get(i).setCPUUsage(hostDescriptionToBeUpdated.getCPUUsage());

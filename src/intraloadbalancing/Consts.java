@@ -10,11 +10,38 @@ package intraloadbalancing;
  */
 public final class Consts {
 
-    public static final int TARGET_STD_DEV = 6;
-    ////// **** Constants for Workload Generation **** ///////    
+    public static final int TARGET_STD_DEV = 5;
+    public static final int NUMBER_OF_VMS = 3840;
+//        480	7
+//        1620	6
+//        3840	5
+//        7500	4
+//        12960	3
+    public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
+    public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
+
+    public static final int LOAD_BALANCING_TYPE = INTRA_DISTRIBUTED_FIXED_COALITIONS;
+
+    public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = false;
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ////// **** Constants for Workload Generation **** ///////
     public static final int AVG_INTERARRIVAL_TIME = 50; // in ms
     public static final int AVG_INTERDEPARTURE_TIME = 25000; // in ms
-    public static final int NUMBER_OF_VMS = 1620;
+
+
+
 
 //    public static final int AVG_INTERDEPARTURE_TIME = 20000; // in ms
 //    public static final int NUMBER_OF_VMS = 20000;
@@ -27,11 +54,10 @@ public final class Consts {
 
     ////// **** Constants for Agent Platform **** ///////    
 
-    public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
-    public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
-    public static final int LOAD_BALANCING_TYPE = VMWARE_CENTRALIZED_WITH_NO_COALITIONS;
+    public static final int NUMBER_OF_LOG_RECORDS = 1000; // after NUMBER_OF_LOG_RECORDS the system stops.
 
-    public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = true;
+
+
 
     public static final int MIGRATION_TRIGGER_BASED_ON_COUNTERS = 0; // how many times a given resource usage has violated a threshold within a moving time window
     public static final int MIGRATION_TRIGGER_BASED_ON_AVERAGE_USAGE = 1; // average resource usage above/below  threshold within a moving time window
@@ -52,6 +78,7 @@ public final class Consts {
     // When comparing VMware against our work, VMWARE_TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE == HOST_TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE
 
 
+    //public static final int VMWARE_MAX_MIGRATIONS = 10000;
     public static final int VMWARE_MAX_MIGRATIONS = 10000;
     public static final boolean VMWARE_BALANCE_CPU_LOAD = true;
     public static final boolean VMWARE_BALANCE_MEMORY_LOAD = false;
