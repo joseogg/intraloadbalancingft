@@ -52,6 +52,7 @@ public class HostAgent extends Agent {
 
     private int currentTick; // this is to keep track of the time window when Consts.MIGRATION_TRIGGER_TYPE == Consts.MIGRATION_TRIGGER_BASED_ON_AVERAGE_USAGE
 
+    private static ExperimentRunConfiguration configuration;
 
     public HostAgent() {
         lastCPUUsages = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
@@ -98,6 +99,8 @@ public class HostAgent extends Agent {
 
             edges = (HashSet) (args[4]);
 
+            configuration = (ExperimentRunConfiguration) args[6];
+
             if (!Consts.LOG) {
                 System.out.println(this.getLocalName() + "'s container is " + this.getContainerController().getContainerName());
             }
@@ -109,11 +112,11 @@ public class HostAgent extends Agent {
                 hostAgentGUI.setVisible(true);
             }
 
-            if (Consts.LOAD_BALANCING_TYPE == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
+            if (configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
                 addBehaviour(new CNPParticipantForIntraLoadBalancingAtoB(this)); // the agent always listens for potential requests for Intra Load Balancing from A (this source host) to B (a destination host).
                 addBehaviour(new CNPParticipantForIntraLoadBalancingBtoA(this)); // the agent always listens for potential requests for Intra Load Balancing from B (an external host) to A (this destination host).
 
-                if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME) {
+                if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME()) {
                     if (hostDescription.isLeader())
                         addBehaviour(new LeaderListenerForCounterReset(this));
                     else
@@ -121,7 +124,7 @@ public class HostAgent extends Agent {
                 }
 
 
-            } else if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
+            } else if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                 addBehaviour(new VMWARE_RemoveAndMigrateVM(this));
                 addBehaviour(new VMWARE_LockVM(this));
                 addBehaviour(new VMWARE_LockResources(this));
@@ -943,7 +946,7 @@ public class HostAgent extends Agent {
                 msg.setConversationId(Consts.CONVERSATION_MONITOR_HOST);
                 msg.setContentObject((java.io.Serializable) hostDescription);
                 send(msg);
-                if (Consts.LOAD_BALANCING_TYPE == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
+                if (configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
 
                     if (Consts.MIGRATION_TRIGGER_TYPE == Consts.MIGRATION_TRIGGER_BASED_ON_COUNTERS) {
 
@@ -1133,11 +1136,11 @@ public class HostAgent extends Agent {
         // thresholds[2]  low Memory 
         // thresholds[3]  high Memory
 
-        thresholds[0] = (int) Math.round(mean(responses, "CPU")) - Consts.TARGET_STD_DEV;
-        thresholds[1] = (int) Math.round(mean(responses, "CPU")) + Consts.TARGET_STD_DEV;
+        thresholds[0] = (int) Math.round(mean(responses, "CPU")) - configuration.getTARGET_STD_DEV();
+        thresholds[1] = (int) Math.round(mean(responses, "CPU")) + configuration.getTARGET_STD_DEV();
 
-        thresholds[2] = (int) Math.round(mean(responses, "Memory")) - Consts.TARGET_STD_DEV;
-        thresholds[3] = (int) Math.round(mean(responses, "Memory")) + Consts.TARGET_STD_DEV;
+        thresholds[2] = (int) Math.round(mean(responses, "Memory")) - configuration.getTARGET_STD_DEV();
+        thresholds[3] = (int) Math.round(mean(responses, "Memory")) + configuration.getTARGET_STD_DEV();
 
         for (int i = 0; i < thresholds.length; i++) {
             if (thresholds[i] > 100) {
@@ -1173,9 +1176,12 @@ public class HostAgent extends Agent {
          */
         try {
             // the heuristics
-            //heuristics.heuristic_exhaustive();
-            heuristics.heuristic_maxMinHostUsage();
-            //heuristics.heuristic_roulette_wheel(); // to be updated
+            if (configuration.getHEURISTIC().equals("EXHAUSTIVE"))
+                heuristics.heuristic_exhaustive();
+            else if (configuration.getHEURISTIC().equals("MAXMIN"))
+                heuristics.heuristic_maxMinHostUsage();
+            else if (configuration.getHEURISTIC().equals("ROULETTE"))
+                heuristics.heuristic_roulette_wheel();
 
             selectedHost = heuristics.getSelectedHost();
             selectedVM = heuristics.getSelectedVM();
@@ -1536,7 +1542,7 @@ public class HostAgent extends Agent {
                             decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
                             decision.getSelectedVM().setOwnerId(inform.getSender().getLocalName());
                             operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "AtoB");
-                            if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME)
+                            if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME())
                                 agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
                             resetAverageUsages();
                             resetCounters();
@@ -1822,7 +1828,7 @@ public class HostAgent extends Agent {
                         decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
                         decision.getSelectedVM().setOwnerId(accept.getSender().getLocalName());
                         operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "BtoA");
-                        if (Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME)
+                        if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME())
                             agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
                         resetAverageUsages();
                         resetCounters();

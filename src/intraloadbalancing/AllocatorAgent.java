@@ -35,6 +35,7 @@ public class AllocatorAgent extends Agent {
     private boolean memoryThresholdViolated;
     private boolean VMWAREkeepMigrating;
 
+    private static ExperimentRunConfiguration configuration;
 
     public AllocatorAgent() {
         possiblyCompromisedHosts = new ArrayList<HostDescription>();
@@ -54,6 +55,9 @@ public class AllocatorAgent extends Agent {
         Object[] args = getArguments();
         hosts = (ArrayList<HostDescription>) args[0];
         hostLeaders = (ArrayList<HostDescription>) args[1];  //Added by Joel 2020-06-24
+
+        configuration = (ExperimentRunConfiguration) args[2];
+
         if (!Consts.LOG) {
             System.out.println("\n" + hosts + "\n");
         }
@@ -162,7 +166,7 @@ public class AllocatorAgent extends Agent {
 
                 }
 
-                if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
+                if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                     currentTick++;
                     lastCPUStdDev[currentTick] = stdDev("cpu", hosts, -1);
                     lastMemoryStdDev[currentTick] = stdDev("memory", hosts, -1);
@@ -179,16 +183,16 @@ public class AllocatorAgent extends Agent {
                         double avgCPUStdDev = totalCPUStdDev / (double) lastCPUStdDev.length; // average CPU Std dev within a time window
                         double avgMemoryStdDev = totalMemoryStdDev / (double) lastMemoryStdDev.length; // average Memory Std dev within a time window
                         //System.out.println("numberOfContinuousMigrations "+ numberOfContinuousMigrations);
-                        if (numberOfContinuousMigrations >= Consts.VMWARE_MAX_MIGRATIONS) {
+                        if (numberOfContinuousMigrations >= configuration.getVMWARE_MAX_MIGRATIONS()) {
                             numberOfContinuousMigrations = 0;
                             VMWAREkeepMigrating = false;
                             //currentTick = -1;
-                        } else if (((avgCPUStdDev <= Consts.TARGET_STD_DEV) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_CPU_LOAD) ||
-                                ((avgMemoryStdDev <= Consts.TARGET_STD_DEV) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_MEMORY_LOAD)) {
+                        } else if (((avgCPUStdDev <= configuration.getTARGET_STD_DEV()) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_CPU_LOAD) ||
+                                ((avgMemoryStdDev <= configuration.getTARGET_STD_DEV()) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_MEMORY_LOAD)) {
                             numberOfContinuousMigrations = 0;
                             VMWAREkeepMigrating = false;
                             //currentTick = -1;
-                        } else if ((avgCPUStdDev > Consts.TARGET_STD_DEV) && (Consts.VMWARE_BALANCE_CPU_LOAD)) {
+                        } else if ((avgCPUStdDev > configuration.getTARGET_STD_DEV()) && (Consts.VMWARE_BALANCE_CPU_LOAD)) {
                             //currentTick = -1;
                             CPUThresholdViolated = true;
                             VMWAREkeepMigrating = true;
@@ -198,7 +202,7 @@ public class AllocatorAgent extends Agent {
                             }
                             //System.out.println("I NEED TO BALANCE CPU");
                             agt.addBehaviour(new VMWARE_LoadBalancing(agt, Consts.MIGRATION_CAUSE_VMWARE_JUST_CPU, avgCPUStdDev));
-                        } else if ((avgMemoryStdDev > Consts.TARGET_STD_DEV) && (Consts.VMWARE_BALANCE_MEMORY_LOAD)) {
+                        } else if ((avgMemoryStdDev > configuration.getTARGET_STD_DEV()) && (Consts.VMWARE_BALANCE_MEMORY_LOAD)) {
                             //currentTick = -1;
                             memoryThresholdViolated = true;
                             VMWAREkeepMigrating = true;
@@ -877,7 +881,7 @@ public class AllocatorAgent extends Agent {
 
             try {
 
-                if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
+                if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                     if (!possiblyCompromisedHosts.contains(selectedHost))
                         possiblyCompromisedHosts.add(selectedHost); // add the selectedHost to the possibly compromised hosts that are not available to host a VM because of a concurrent initial VM allocation 
                 }
@@ -919,7 +923,7 @@ public class AllocatorAgent extends Agent {
             ACLMessage msg = receive(mt);
             if (msg != null) {
 
-                if (Consts.LOAD_BALANCING_TYPE == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
+                if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                     Predicate<HostDescription> condition = hostDescription -> hostDescription.getId().equals(msg.getSender().getLocalName());
                     possiblyCompromisedHosts.removeIf(condition);
                 }

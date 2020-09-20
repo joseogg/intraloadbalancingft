@@ -4,7 +4,7 @@
  */
 package intraloadbalancing;
 
-import static intraloadbalancing.Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS;
+
 
 import jade.core.AID;
 import jade.core.Agent;

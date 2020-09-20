@@ -9,7 +9,7 @@ package intraloadbalancing;
  * @author octavio
  */
 public final class Consts {
-
+/*
     public static final int TARGET_STD_DEV = 5;
     public static final int NUMBER_OF_VMS = 3840;
 //        480	7
@@ -17,24 +17,25 @@ public final class Consts {
 //        3840	5
 //        7500	4
 //        12960	3
-    public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
-    public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
+
 
     public static final int LOAD_BALANCING_TYPE = INTRA_DISTRIBUTED_FIXED_COALITIONS;
 
     public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = false;
 
+    public static final int MIGRATION_THRESHOLD_FOR_LOW_CPU = 0; // from 0 to 100 %
+    public static final int MIGRATION_THRESHOLD_FOR_HIGH_CPU = TARGET_STD_DEV; // from 0 to 100 %
+    public static final int MIGRATION_THRESHOLD_FOR_LOW_MEMORY = 0; // from 0 to 100 %
+    public static final int MIGRATION_THRESHOLD_FOR_HIGH_MEMORY = TARGET_STD_DEV; // from 0 to 100 %
 
 
+    */
+    public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
+    public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
 
-
-
-
-
-
-
-
-
+    public static final String EXHAUSTIVE = "EXHAUSTIVE";
+    public static final String MAXMIN = "MAXMIN";
+    public static final String ROULETTE = "ROULETTE";
 
     ////// **** Constants for Workload Generation **** ///////
     public static final int AVG_INTERARRIVAL_TIME = 50; // in ms
@@ -79,7 +80,7 @@ public final class Consts {
 
 
     //public static final int VMWARE_MAX_MIGRATIONS = 10000;
-    public static final int VMWARE_MAX_MIGRATIONS = 10000;
+
     public static final boolean VMWARE_BALANCE_CPU_LOAD = true;
     public static final boolean VMWARE_BALANCE_MEMORY_LOAD = false;
 
@@ -113,10 +114,7 @@ public final class Consts {
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_CPU = 10;
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY = 100000;
 
-    public static final int MIGRATION_THRESHOLD_FOR_LOW_CPU = 0; // from 0 to 100 %
-    public static final int MIGRATION_THRESHOLD_FOR_HIGH_CPU = TARGET_STD_DEV; // from 0 to 100 %
-    public static final int MIGRATION_THRESHOLD_FOR_LOW_MEMORY = 0; // from 0 to 100 %
-    public static final int MIGRATION_THRESHOLD_FOR_HIGH_MEMORY = TARGET_STD_DEV; // from 0 to 100 %
+
 
     public static final boolean BALANCE_CPU = true;
     public static final boolean BALANCE_MEMORY = false;

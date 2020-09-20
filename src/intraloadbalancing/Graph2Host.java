@@ -29,8 +29,11 @@ public class Graph2Host {
     private ArrayList<HostDescription> leaders;
     private HashSet<weightEdge> listEdges;
 
-    public Graph2Host(String xFile) {
+    private static ExperimentRunConfiguration configuration;
+
+    public Graph2Host(String xFile, ExperimentRunConfiguration aConfiguration) {
         graphString = xFile;
+        this.configuration = aConfiguration;
         hosts = new ArrayList<HostDescription>();
         neighborsCoalition = new Hashtable();//This can be a <HostDescription,distance>
         neighborsDistance = new Hashtable();
@@ -182,10 +185,10 @@ public class Graph2Host {
                     0.0,
                     hostSpecs[0],//xxCPU,
                     0,
-                    Consts.MIGRATION_THRESHOLD_FOR_LOW_CPU, // - int value from 0 to 100
-                    Consts.MIGRATION_THRESHOLD_FOR_HIGH_CPU, // - int value from 0 to 100 but greater than > lowMigrationThresholdForCPU
-                    Consts.MIGRATION_THRESHOLD_FOR_LOW_MEMORY, // - int value from 0 to 100
-                    Consts.MIGRATION_THRESHOLD_FOR_HIGH_MEMORY, // - int value from 0 to 100 but greater than > lowMigrationThresholdForMemory
+                    configuration.getMIGRATION_THRESHOLD_FOR_LOW_CPU(), // - int value from 0 to 100
+                    configuration.getMIGRATION_THRESHOLD_FOR_HIGH_CPU(), // - int value from 0 to 100 but greater than > lowMigrationThresholdForCPU
+                    configuration.getMIGRATION_THRESHOLD_FOR_LOW_MEMORY(), // - int value from 0 to 100
+                    configuration.getMIGRATION_THRESHOLD_FOR_HIGH_MEMORY(), // - int value from 0 to 100 but greater than > lowMigrationThresholdForMemory
                     0,
                     0,
                     "AllocatorAgent",

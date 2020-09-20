@@ -27,7 +27,7 @@ import com.tinkerpop.blueprints.Graph;
  */
 public class IntraLoadBalancing {
 
-
+    private static ExperimentRunConfiguration configuration;
 
     // Creating coalitions
     private static ArrayList<String> createCoalitionFor(String hostId, ArrayList<HashSet<String>> setCoalitions) {
@@ -58,27 +58,51 @@ public class IntraLoadBalancing {
 
 
         try {
-
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
-
-            String XML_FILE = "./fat_trees/big_fat_tree_datacenterCoalitions4_1.XML";
+/*
+            args = new String[10];
+            args [0]= "1";
+            args [1]= "big_fat_tree_datacenterCoalitions4_4.XML";
+            args [2]= "10";
+            args [3]= "10000";
+            args [4]= "INTRA";
+            args [5]= "1";
+            args [6]= "EXHAUSTIVE";
+            args [7]= "fat_trees";
+            args [8]= "RESULTS";
+            args [9]= "10000";
+*/
+            String XML_FILE = "./fat_trees/big_fat_tree_datacenterCoalitions8_1.XML";
             String fileSufix ="";
+            String outputDirectory = "./";
             int initialPort = 30000;
             if (args != null) {
                 if (args.length > 0) {
                     // args 0 : experiment run
                     // args 1 : datacenter filename
-                    fileSufix = args[0]+ "_"+  args[1] + "_"+
-                            String.valueOf(Consts.AVG_INTERARRIVAL_TIME)+"_" +
-                            String.valueOf(Consts.AVG_INTERDEPARTURE_TIME)+"_" +
-                            String.valueOf(Consts.TARGET_STD_DEV)+"_" +
-                            String.valueOf(Consts.NUMBER_OF_VMS)+"_" +
-                            String.valueOf(Consts.LOAD_BALANCING_TYPE)+"_" +
-                            String.valueOf(Consts.BALANCING_ONLY_ONE_COALITION_AT_A_TIME);
+                    // args 2 : target std dev
+                    // args 3 : number of vms
+                    // args 4 : load balancing type
+                    // args 5 : BALANCING_ONLY_ONE_COALITION_AT_A_TIME
+                    // args 6 : Heuristics
+                    // args 7 : input directory
+                    // args 8 : output directory
+                    // args 9 : VMWARE_MAX_MIGRATIONS
 
-                    XML_FILE = "./fat_trees/"+args[1];
+
+                    configuration = new ExperimentRunConfiguration(Integer.valueOf(args[2]), Integer.valueOf(args[3]), args[4], Integer.valueOf(args[5]), 0, Integer.valueOf(args[2]), 0, Integer.valueOf(args[2]), args[6], Integer.valueOf(args[9]) );
+
+                    if (configuration.getLOAD_BALANCING_TYPE()== Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS){
+                        fileSufix = args[0]+ "_"+  args[1] + "_"+  args[2] + "_"+  args[3] + "_"+  args[4] + "_"+  args[5] + "_"+  args[6] + "_"+  args[7] + "_"+  args[8];
+                    } else {
+                        fileSufix = args[0]+ "_"+  args[1] + "_"+  args[2] + "_"+  args[3] + "_"+  args[4] + "_"+  args[6] + "_"+  args[7] + "_"+  args[8] + "_"+  args[9];
+                    }
+
+                    XML_FILE = "./"+args[7]+"/"+args[1];
+                    outputDirectory ="./"+args[8]+"/";
+
                 }
      //           if (args.length > 1) {
      //               initialPort = Integer.valueOf(args[1]);
@@ -87,7 +111,7 @@ public class IntraLoadBalancing {
 
             //System.out.println("Hi-1");
             if (Consts.LOG_TO_FILE) {
-                PrintStream outputFile = new PrintStream("./output" + fileSufix + ".txt"); // I should customize filename so as to we can automize experiments 
+                PrintStream outputFile = new PrintStream(outputDirectory+"output" + fileSufix + ".txt"); // I should customize filename so as to we can automize experiments
                 //System.out.println("Hi-0.5");
                 System.setOut(outputFile);
             }
@@ -110,7 +134,7 @@ public class IntraLoadBalancing {
 
             Graph G;
 
-            Graph2Host graphStructure = new Graph2Host(XML_FILE);
+            Graph2Host graphStructure = new Graph2Host(XML_FILE, configuration);
 
 
             G = graphStructure.readGraph();
@@ -118,7 +142,7 @@ public class IntraLoadBalancing {
             graphStructure.setCoalition2HashTable(G);//determine coalition IDs for Hosts
             graphStructure.createHosts(G);
             ArrayList<HashSet<String>> setCoalitions = graphStructure.getCoalitions();
-
+            System.out.println("Number of coalitions: "+ graphStructure.getLeaders().size()+ " Total number of hosts: "+ graphStructure.getHostsAndNeighbors().size());
 //            for (int member = 0; member < setCoalitions.size(); member++) {
 //                HashSet<String> s = setCoalitions.get(member);
 //                System.out.print("COALITION:[");
@@ -134,7 +158,6 @@ public class IntraLoadBalancing {
             jade.wrapper.AgentContainer mainBasicServicesContainer;
             jade.wrapper.AgentContainer allocatorContainer;
             jade.wrapper.AgentContainer workloadGeneratorContainer;
-
             // creating a container for each host
             jade.wrapper.AgentContainer hostContainers[] = new jade.wrapper.AgentContainer[graphStructure.getHosts().size()];
 
@@ -201,23 +224,25 @@ public class IntraLoadBalancing {
             //mainBasicServicesContainer.getAgent("RMA").start();
 
 
+
             dataCenterStructure = graphStructure.getHostsAndNeighbors();
             hostDescriptions = graphStructure.getHosts();
             HashSet<weightEdge> listEdges = graphStructure.getListEdges();
 
-            Object[] allocatorAgentParams = new Object[2];
+            Object[] allocatorAgentParams = new Object[3];
             ArrayList<HostDescription> xLeaders = graphStructure.getLeaders();
 
             allocatorAgentParams[0] = hostDescriptions;
             allocatorAgentParams[1] = xLeaders; // leaders identifies the coalition members of its own coalition
-            System.out.println("Number of coalitions: "+ xLeaders.size()+ " Total number of hosts: "+ dataCenterStructure.size());
+            allocatorAgentParams[2] = configuration;
+
             // Starting allocator agent
             allocatorContainer.createNewAgent("AllocatorAgent", "intraloadbalancing.AllocatorAgent", allocatorAgentParams);
             allocatorContainer.getAgent("AllocatorAgent").start();
 
             // Starting host agents
             for (int i = 0; i < dataCenterStructure.size(); i++) {
-                Object[] hostAgentParams = new Object[6];
+                Object[] hostAgentParams = new Object[7];
                 HostDescription xHost = dataCenterStructure.get(i).getHostDescription();
                 Hashtable neighborsDistance = dataCenterStructure.get(i).getNeighbors();//Weights of neighbors 
                 ArrayList<String> membersOfCoalition = dataCenterStructure.get(i).getMembersOfCoalition();
@@ -229,6 +254,7 @@ public class IntraLoadBalancing {
                 hostAgentParams[3] = setCoalitions.get(posCoalition);
                 hostAgentParams[4] = listEdges;
                 hostAgentParams[5] = neighborsDistance;
+                hostAgentParams[6] = configuration;
 
                 hostContainers[i].createNewAgent(xHost.getId(), "intraloadbalancing.HostAgent", hostAgentParams);
                 hostContainers[i].getAgent(xHost.getId()).start();
@@ -239,13 +265,17 @@ public class IntraLoadBalancing {
             if (Consts.WORKLOAD_GENERATOR_AGENT_GUI) {
                 new WorkloadGeneratorGUI(workloadGeneratorContainer).setVisible(true); // to manually start the simulation
             } else {
-                workloadGeneratorContainer.createNewAgent("WorkloadGeneratorAgent", "intraloadbalancing.WorkloadGeneratorAgent", null);
+
+                Object[] workloadGeneratorContainerParams = new Object[1];
+                workloadGeneratorContainerParams[0] = configuration;
+
+                workloadGeneratorContainer.createNewAgent("WorkloadGeneratorAgent", "intraloadbalancing.WorkloadGeneratorAgent", workloadGeneratorContainerParams);
                 workloadGeneratorContainer.getAgent("WorkloadGeneratorAgent").start();
             }
 
         } catch (Exception ex) {
             if (Consts.EXCEPTIONS) {
-                System.out.println(ex);
+                ex.printStackTrace();
             }
         }
     }

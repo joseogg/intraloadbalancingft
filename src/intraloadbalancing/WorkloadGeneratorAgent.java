@@ -19,10 +19,14 @@ import java.util.Random;
  */
 public class WorkloadGeneratorAgent extends Agent {
 
+    private static ExperimentRunConfiguration configuration;
+
     @Override
     protected void setup() {
 
         Utilities utils = new Utilities();
+        Object[] args = getArguments();
+        configuration = (ExperimentRunConfiguration) args[0];
 
         // Searching for an allocator agent
         String[] searchResults = utils.searchForAgents(this, "AllocatorAgent", 1);
@@ -32,7 +36,7 @@ public class WorkloadGeneratorAgent extends Agent {
         // Creating behaviours -> delay - requestVM - delay - requestVM - delay - RequestVM .... 
         SequentialBehaviour setOfvirtualMachineRequests = new SequentialBehaviour(this);
         int virtualMachinesRequested = 0;
-        while (virtualMachinesRequested < Consts.NUMBER_OF_VMS) {
+        while (virtualMachinesRequested < configuration.getNUMBER_OF_VMS()) {
 
             long delay = (long) (Consts.AVG_INTERARRIVAL_TIME * (-Math.log(Math.random()))); //  Arrival process is Poisson-distributed
             averageDelay = averageDelay + delay;
