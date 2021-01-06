@@ -974,7 +974,7 @@ public class HostAgent extends Agent {
                             thresholdViolationCounterForLowMemory--;
                         }
 
-                        // verifying wheather any counter cause a vm migration from this host agent or other host agent from the same coalition
+                        // verifying whether any counter cause a vm migration from this host agent or other host agent from the same coalition
                         if ((thresholdViolationCounterForHighCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_CPU) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();

@@ -61,6 +61,18 @@ public class IntraLoadBalancing {
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
             // Logging experiment's output in a file.
+
+                    // args 0 : experiment run
+                    // args 1 : datacenter filename
+                    // args 2 : target std dev
+                    // args 3 : number of vms
+                    // args 4 : load balancing type
+                    // args 5 : BALANCING_ONLY_ONE_COALITION_AT_A_TIME
+                    // args 6 : Heuristics
+                    // args 7 : input directory
+                    // args 8 : output directory
+                    // args 9 : VMWARE_MAX_MIGRATIONS
+
 /*
             args = new String[10];
             args [0]= "1";
@@ -80,16 +92,7 @@ public class IntraLoadBalancing {
             int initialPort = 30000;
             if (args != null) {
                 if (args.length > 0) {
-                    // args 0 : experiment run
-                    // args 1 : datacenter filename
-                    // args 2 : target std dev
-                    // args 3 : number of vms
-                    // args 4 : load balancing type
-                    // args 5 : BALANCING_ONLY_ONE_COALITION_AT_A_TIME
-                    // args 6 : Heuristics
-                    // args 7 : input directory
-                    // args 8 : output directory
-                    // args 9 : VMWARE_MAX_MIGRATIONS
+
 
 
                     configuration = new ExperimentRunConfiguration(Integer.valueOf(args[2]), Integer.valueOf(args[3]), args[4], Integer.valueOf(args[5]), 0, Integer.valueOf(args[2]), 0, Integer.valueOf(args[2]), args[6], Integer.valueOf(args[9]) );

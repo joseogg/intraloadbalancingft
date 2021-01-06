@@ -55,7 +55,7 @@ public final class Consts {
 
     ////// **** Constants for Agent Platform **** ///////    
 
-    public static final int NUMBER_OF_LOG_RECORDS = 1000; // after NUMBER_OF_LOG_RECORDS the system stops.
+        public static final int NUMBER_OF_LOG_RECORDS = 1000; // after NUMBER_OF_LOG_RECORDS the system stops.
 
 
 
@@ -113,8 +113,6 @@ public final class Consts {
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_MEMORY = 100000;
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_CPU = 10;
     public static final int MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY = 100000;
-
-
 
     public static final boolean BALANCE_CPU = true;
     public static final boolean BALANCE_MEMORY = false;
@@ -211,7 +209,6 @@ u-24tb1.metal 	448 	24576
     public static final boolean HOST_AGENT_GUI = false; // Enable or Disable HostAgents' GUIs
     public static final boolean ALLOCATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
     public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI    
-
 
     private Consts() {
         throw new AssertionError();
