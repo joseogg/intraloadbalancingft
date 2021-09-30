@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package intraloadbalancing;
+package intraloadbalancingft;
 
 import jade.core.AID;
 import jade.core.Agent;
@@ -67,6 +67,27 @@ public class AllocatorAgent extends Agent {
 
         addBehaviour(new RequestsReceiver(this));
         addBehaviour(new MonitorListener(this));
+
+        // every 1000 check whether a switch has failed or unfailed
+        addBehaviour(new GenerateSwitchFailures(this, Consts.TICKS_FOR_SWITCH_FAILURE_GENERATION));
+
+    }
+
+    private class GenerateSwitchFailures extends TickerBehaviour {
+
+        private ACLMessage msg;
+
+        public GenerateSwitchFailures(Agent a, long period) {
+            super(a, period);
+        }
+
+        @Override
+        public synchronized void onTick() {
+
+            //public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
+            System.out.printf("HI");
+
+        }
     }
 
 
@@ -848,6 +869,7 @@ public class AllocatorAgent extends Agent {
                 if ((availableHosts.size() > 0)) { // If the VM can be hosted in the Datacenter
                     randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
                     agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
+
                 } else {
                     // behavior that keeps trying to allocate the VM
                     agt.addBehaviour(new PeriodicallyAttemptingToAllocateVM(agt, Consts.PERIOD_FOR_PERIODICALLY_ATTEMPTING_TO_ALLOCATE_VM, vm));
@@ -972,9 +994,10 @@ public class AllocatorAgent extends Agent {
 
             if (availableHosts.size() > 0) { // If the VM can be hosted in the Datacenter
                 HostDescription randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
-                agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
-                //agt.addBehaviour(new virtualMachineAllocator(agt, "HostAgent0", vm)); // Allocate VM to a host selected at random.
-                stop(); // terminate ticker behavior
+
+                    agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
+                    stop(); // terminate ticker behavior
+
             }
 
         }
@@ -1014,7 +1037,6 @@ public class AllocatorAgent extends Agent {
                     System.out.println(ex);
                 }
             }
-
         }
     }
 

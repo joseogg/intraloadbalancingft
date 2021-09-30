@@ -1,4 +1,4 @@
-package intraloadbalancing;
+package intraloadbalancingft;
 
 import java.util.ArrayList;
 import java.util.function.Predicate;
@@ -23,8 +23,9 @@ class HostDescription implements java.io.Serializable {
     private int highMigrationThresholdForCPU = 0;
     private int lowMigrationThresholdForMemory = 0;
     private int highMigrationThresholdForMemory = 0;
-    private boolean willingToParticipateInCNP = false;
+    private boolean willingToParticipateInCNP = true;
     private boolean leader = false;
+    private boolean failed = false;
     private int CPUMigrationHeuristicId = 0;
     private int memoryMigrationHeuristicId = 0; // TBD potentially a random heuristic to avoid bias
     private String containerName = "";
@@ -63,6 +64,7 @@ class HostDescription implements java.io.Serializable {
         this.myLeader = myLeader;
         this.willingToParticipateInCNP = true;
         this.inProgress = false;
+        this.failed = false;
     }
 
     public void setVirtualMachinesHosted(ArrayList<VirtualMachineDescription> virtualMachinesHosted) {
@@ -99,6 +101,14 @@ class HostDescription implements java.io.Serializable {
 
     public String getMyLeader() {
         return myLeader;
+    }
+
+    public boolean isFailed() {
+        return failed;
+    }
+
+    public void setFailed(boolean failed) {
+        this.failed = failed;
     }
 
     public boolean isLeader() {
@@ -295,6 +305,7 @@ class HostDescription implements java.io.Serializable {
                 + ", lowThresMem=" + lowMigrationThresholdForMemory
                 + ", highThresMem=" + highMigrationThresholdForMemory
                 + ", myLeader=" + myLeader
+                + ", failed=" + failed
                 + ", numberOfVMs=" + virtualMachinesHosted.size();
     }
 

@@ -1,4 +1,4 @@
-package intraloadbalancing;
+package intraloadbalancingft;
 
 import com.tinkerpop.blueprints.Direction;
 import com.tinkerpop.blueprints.Edge;

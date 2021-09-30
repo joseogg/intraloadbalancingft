@@ -1,8 +1,6 @@
-package intraloadbalancing;
+package intraloadbalancingft;
 
 import java.util.function.Predicate;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.*;
 import java.io.IOException;
 
@@ -19,9 +17,6 @@ import jade.domain.FIPAAgentManagement.RefuseException;
 import jade.domain.FIPANames;
 import jade.proto.ContractNetInitiator;
 import jade.proto.ContractNetResponder;
-import jade.wrapper.ControllerException;
-
-import java.io.Serializable;
 
 /**
  * @author JGUTIERRGARC
@@ -30,6 +25,10 @@ public class HostAgent extends Agent {
 
     private HostDescription hostDescription;
     private int conversationId;
+
+    private boolean failed;
+    private long failureTicksDuration;
+    private double failureProbability;
 
     private double[] lastCPUUsages;
     private double[] lastMemoryUsages;
@@ -55,10 +54,14 @@ public class HostAgent extends Agent {
     private static ExperimentRunConfiguration configuration;
 
     public HostAgent() {
+        failed = false;
+        failureTicksDuration = 0;
+        failureProbability = 0.0; // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
         lastCPUUsages = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
         lastMemoryUsages = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
         hostDescription = new HostDescription();
         hostDescription.setInProgress(false);
+        hostDescription.setFailed(false);
         utils = new Utilities();
         coalitionMembers = new ArrayList<String>();
         coalitionLeaders = new ArrayList<HostDescription>();
@@ -69,21 +72,6 @@ public class HostAgent extends Agent {
         conversationId = 0;
     }
 
-    double getDistance(String source, String destination) {
-        if (source.equals(destination)) {
-            return 0;
-        }
-        Iterator<weightEdge> i = edges.iterator();
-        while (i.hasNext()) {
-            weightEdge edge = i.next();
-            String in = "HostAgent" + edge.getInNode();
-            String out = "HostAgent" + edge.getOutNode();
-            if ((in.equals(source) && out.equals(destination)) ||
-                    (in.equals(destination) && out.equals(source)))
-                return edge.getDistance();
-        }
-        return -1;
-    }
 
     @Override
     protected void setup() {
@@ -100,6 +88,7 @@ public class HostAgent extends Agent {
             edges = (HashSet) (args[4]);
 
             configuration = (ExperimentRunConfiguration) args[6];
+            failureProbability = (double)args[7];
 
             if (!Consts.LOG) {
                 System.out.println(this.getLocalName() + "'s container is " + this.getContainerController().getContainerName());
@@ -123,7 +112,6 @@ public class HostAgent extends Agent {
                         addBehaviour(new MemberListenerForCounterReset(this));
                 }
 
-
             } else if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                 addBehaviour(new VMWARE_RemoveAndMigrateVM(this));
                 addBehaviour(new VMWARE_LockVM(this));
@@ -134,12 +122,16 @@ public class HostAgent extends Agent {
             }
 
             // Behaviours required for any balancing type.
+
             addBehaviour(new ListenerForVMMigrations(this));
             addBehaviour(new RequestsReceiver(this));
             addBehaviour(new PerformanceReporterAndThresholdMonitoring(this, Consts.HOST_REPORTING_RATE + new Random().nextInt((int) Consts.RANGE_OF_RANDOM_TICKS))); // Added a random number to prevent colitions among host agents when enacting interactions protocols.
             addBehaviour(new VirtualMachineKiller(this, (long) (Consts.AVG_INTERDEPARTURE_TIME * (-Math.log(Math.random())))));
             addBehaviour(new MonitorListener(this));
 
+            // Behaviours required for fault-tolerance.
+            addBehaviour(new SwitchFailureHandler(this));
+            addBehaviour(new UpdateStatusFailure(this, 1000));
 
         } catch (Exception ex) {
             if (Consts.EXCEPTIONS) {
@@ -148,6 +140,54 @@ public class HostAgent extends Agent {
         }
     }
 
+
+    double getDistance(String source, String destination) {
+        if (source.equals(destination)) {
+            return 0;
+        }
+        Iterator<weightEdge> i = edges.iterator();
+        while (i.hasNext()) {
+            weightEdge edge = i.next();
+            String in = "HostAgent" + edge.getInNode();
+            String out = "HostAgent" + edge.getOutNode();
+            if ((in.equals(source) && out.equals(destination)) ||
+                    (in.equals(destination) && out.equals(source)))
+                return edge.getDistance();
+        }
+        return -1;
+    }
+
+    private class UpdateStatusFailure extends TickerBehaviour {
+
+        private ACLMessage msg;
+
+        public UpdateStatusFailure(Agent a, long period) {
+            super(a, period);
+        }
+
+        @Override
+        public synchronized void onTick() {
+
+                if (failureTicksDuration > 0) {
+                    failureTicksDuration--;
+                    if (failureTicksDuration == 0) {
+                        //System.out.println(hostDescription.getId()+ " is up again");
+                        failed = false;
+                        hostDescription.setFailed(false);
+                    }
+                }
+                if ((!failed) && (Math.random() < failureProbability) && !hostDescription.isInProgress()) {
+                    resetAverageUsages();
+                    resetCounters();
+                    resetThresholdFlags();
+                    failed = true;
+                    hostDescription.setFailed(true);
+                    failureTicksDuration = Math.round(Math.random() * 60); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
+                    //System.out.println(hostDescription.getId()+ " failed for " + failureTicksDuration);
+                }
+
+        }
+    }
 
     private class LeaderListenerForCounterReset extends CyclicBehaviour {
 
@@ -497,12 +537,9 @@ public class HostAgent extends Agent {
                 try {
 
                     vm = (VirtualMachineDescription) (msg.getContentObject());
-                    if (operationOverVM(vm, "migration", null)) { // if it can host the VM
-                        if (!Consts.LOG) {
-                            System.out.println(hostDescription.getId() + " succesful migration of VM: " + vm);
-                        }
+                    if (operationOverVM(vm, "migration", null) && !failed) { // if it can host the VM
                         if (Consts.LOG) {
-                            //if (Consts.LOAD_BALANCING_TYPE==Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS){
+                            //System.out.println(hostDescription.getId() + " successful migration of VM: " + vm);
                             System.out.println("{\"coalition\":" + hostDescription.getCoalition()
                                     + ", \"migrationType\":\"" + vm.getMigrationType() + "\""
                                     + ", \"origin\":\"" + vm.getPreviousOwnerId() + "\""
@@ -562,7 +599,7 @@ public class HostAgent extends Agent {
                 try {
                     hostDescription.setInProgress(true);
                     vm = (VirtualMachineDescription) (msg.getContentObject());
-                    if (operationOverVM(vm, "initialAllocation", null)) { // if it can host the VM
+                    if (operationOverVM(vm, "initialAllocation", null) && !failed) { // if it can host the VM
                         acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
@@ -575,9 +612,20 @@ public class HostAgent extends Agent {
                         vmAgentParams = new Object[1];
                         vm.setOwnerId(hostDescription.getId());
                         vmAgentParams[0] = vm;
-                        getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancing.VirtualMachineAgent", vmAgentParams);
+                        getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancingft.VirtualMachineAgent", vmAgentParams);
                         getContainerController().getAgent(String.valueOf(vm.getVirtualMachineId())).start();
                     } else { // it cannot host the vm
+
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
+
                         acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
@@ -597,6 +645,44 @@ public class HostAgent extends Agent {
                 hostDescription.setInProgress(false);
             }
 
+        }
+    }
+
+
+    private class SwitchFailureHandler extends CyclicBehaviour {
+
+        private Agent agt;
+        private MessageTemplate mt;
+        private ACLMessage msg;
+        private ACLMessage acknowledgementMsg;
+        private Object[] vmAgentParams;
+
+        public SwitchFailureHandler(Agent agt) {
+            this.agt = agt;
+            this.mt = MessageTemplate.MatchConversationId(Consts.FAILURE_FROM_SWITCH);
+        }
+
+        @Override
+        public void action() {
+                msg = receive(mt);
+                if (msg == null) {
+                    block();
+                    return;
+                }
+                try {
+                    System.out.println(msg.getContent());
+                    if (msg.getContent().equals("FAILED")) {
+                        failed = true;
+                        hostDescription.setFailed(true);
+                    } else { // if switch working again
+                        failed = false;
+                        hostDescription.setFailed(false);
+                    }
+                } catch (Exception ex) {
+                    if (Consts.EXCEPTIONS) {
+                        System.out.println("It is here Failure 1" + ex);
+                    }
+                }
         }
     }
 
@@ -639,7 +725,7 @@ public class HostAgent extends Agent {
                         vmAgentParams = new Object[2];
                         vm.setOwnerId(hostDescription.getId());
                         vmAgentParams[0] = vm;
-                        getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancing.VirtualMachineAgent", vmAgentParams);
+                        getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancingft.VirtualMachineAgent", vmAgentParams);
                         getContainerController().getAgent(String.valueOf(vm.getVirtualMachineId())).start();
                     } else { // it cannot host the vm
                         acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
@@ -725,16 +811,24 @@ public class HostAgent extends Agent {
             if (memoryUsage > 100) {
                 memoryUsage = 100;
             }
-            hostDescription.setMemoryUsage(memoryUsage);
+            if (!failed)
+                hostDescription.setMemoryUsage(memoryUsage);
+            else
+                hostDescription.setMemoryUsage(0);
             CPUUsage = (100 * sumCPUUsage) / hostDescription.getNumberOfVirtualCores();
             if (CPUUsage > 100) {
                 CPUUsage = 100;
             }
-            hostDescription.setCPUUsage(CPUUsage);
+            if (!failed)
+                hostDescription.setCPUUsage(CPUUsage);
+            else
+                hostDescription.setCPUUsage(0);
         } else {
             hostDescription.setMemoryUsage(0);
             hostDescription.setCPUUsage(0);
         }
+
+
 
         hostAgentGUI.updateResourceConsumption();
     }
@@ -767,7 +861,7 @@ public class HostAgent extends Agent {
         }
 
         protected void handleElapsedTimeout() {
-            if (!hostDescription.isInProgress()) {
+            if (!hostDescription.isInProgress() && !failed) {
                 hostDescription.setInProgress(true);
                 resetAverageUsages();
                 resetCounters();
@@ -853,6 +947,7 @@ public class HostAgent extends Agent {
                     VirtualMachineDescription randomlySelectedVM = hostDescription.getVirtualMachinesHosted().get((new Random()).nextInt(hostDescription.getVirtualMachinesHosted().size()));
                     hostDescription.getVirtualMachinesHosted().remove(randomlySelectedVM);
                     try {
+                        //System.out.println(hostDescription.getId()+" "+randomlySelectedVM.getVirtualMachineId());
                         getContainerController().getAgent(randomlySelectedVM.getVirtualMachineId()).suspend();
                         getContainerController().getAgent(randomlySelectedVM.getVirtualMachineId()).kill();
                         if (!Consts.LOG) {
@@ -862,6 +957,8 @@ public class HostAgent extends Agent {
                         hostDescription.setNumberOfVirtualCoresUsed(hostDescription.getNumberOfVirtualCoresUsed() - randomlySelectedVM.getNumberOfVirtualCores());
                         updateHostResourceConsumption();
                         return true; // success
+                    } catch (jade.wrapper.ControllerException e) {
+                        // VM already removed
                     } catch (Exception e) {
                         if (Consts.EXCEPTIONS) {
                             System.out.println("It is here 22" + e);
@@ -939,14 +1036,14 @@ public class HostAgent extends Agent {
         @Override
         protected void onTick() {
 
-            updateHostResourceConsumption();
             try {
+                updateHostResourceConsumption();
                 msg = new ACLMessage(ACLMessage.INFORM);
                 msg.addReceiver(new AID(hostDescription.getAllocatorId(), AID.ISLOCALNAME));
                 msg.setConversationId(Consts.CONVERSATION_MONITOR_HOST);
                 msg.setContentObject((java.io.Serializable) hostDescription);
                 send(msg);
-                if (configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
+                if ((configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) && (!failed))  {
 
                     if (Consts.MIGRATION_TRIGGER_TYPE == Consts.MIGRATION_TRIGGER_BASED_ON_COUNTERS) {
 
@@ -992,12 +1089,15 @@ public class HostAgent extends Agent {
                             resetCounters();
                             resetAverageUsages();
                             lowCPUThresholdViolated = true;
+                            //System.out.println("Yes I did it!");
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU));
                         } else if ((thresholdViolationCounterForLowMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             lowMemoryThresholdViolated = true;
+                            //System.out.println("Yes I did it!");
+
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY));
                         }
 
@@ -1041,6 +1141,7 @@ public class HostAgent extends Agent {
                                 resetCounters();// unique
                                 resetAverageUsages();
                                 lowCPUThresholdViolated = true;
+                                //System.out.println("Yes I did it!");
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU));
                             } else if ((averageMemoryUsage < hostDescription.getLowMigrationThresholdForMemory()) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
@@ -1048,6 +1149,7 @@ public class HostAgent extends Agent {
                                 resetCounters();// unique
                                 resetAverageUsages();
                                 lowMemoryThresholdViolated = true;
+                                //System.out.println("Yes I did it!");
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY));
                             }
 
@@ -1056,7 +1158,14 @@ public class HostAgent extends Agent {
                             }
                         }
                     }
-                }
+
+
+                } //else if ((configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) && (failed))  {
+                   // resetAverageUsages();
+                    //resetCounters();
+                    //resetThresholdFlags();
+                    //hostDescription.setInProgress(false);
+                //}
 
             } catch (Exception ex) {
                 hostDescription.setInProgress(false);
@@ -1154,26 +1263,12 @@ public class HostAgent extends Agent {
         return thresholds;
     }
 
-    /// BEGIN WORKING ON DANIEL
-    /// aquí modifica Daniel
-// Vector responses is a vector of <ACLMessage>. It can be iterated using an enumeration object -> Enumeration e = responses.elements()
-// Each ACLMessage contains a host description including its virtual machines. To access message content:
-// ACLMessage msg = (ACLMessage) e.nextElement();
-// (HostDescription)msg.getContentObject()
+
     private Decision selectHostAgentBasedOnCoalitionUtility(Vector responses, int loadBalancingCause) {
         Heuristics heuristics = new Heuristics(hostDescription, loadBalancingCause, responses, getArguments());
         HostDescription selectedHost = null;
         VirtualMachineDescription selectedVM = null;
 
-        /*
-    System.out.println("I am host "+hostDescription.getId() + " with " +
-            hostDescription.getNumberOfVirtualCores() + " cores and " +
-            hostDescription.getMemory() + " GB of memory." +
-            " Reserved: " + hostDescription.getNumberOfVirtualCoresUsed() + " cores and " +
-            hostDescription.getMemoryUsed() + "GB; " +
-            "CPUUsage=" + hostDescription.getCPUUsage() + "% and MemoryUsage=" + hostDescription.getMemoryUsage()+"%");
-    System.out.println("Valuating the neighborhood: ");
-         */
         try {
             // the heuristics
             if (configuration.getHEURISTIC().equals("EXHAUSTIVE"))
@@ -1211,7 +1306,7 @@ public class HostAgent extends Agent {
                         if ((selectedVM.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (selectedVM.getMemory() <= hostDescription.getAvailableMemory())) {
                             return new Decision(selectedHost, this.hostDescription, selectedVM, Consts.DECISION_TYPE_MIGRATE_FROM_B_TO_A);
                         } else {
-                            System.out.println("WARNING. (AtoB) failed migration FROM " + selectedHost.getId() + " TO " + hostDescription.getId() + " THE VM " + selectedVM.getId() + " and a valuation of " + heuristics.getValuationValue());
+                            System.out.println("WARNING. (BtoA) failed migration FROM " + selectedHost.getId() + " TO " + hostDescription.getId() + " THE VM " + selectedVM.getId() + " and a valuation of " + heuristics.getValuationValue());
                             return new Decision(new HostDescription(), new HostDescription(), selectedVM, Consts.DECISION_TYPE_DONT_MIGRATE);
                         }
                     } else { // External host agents do not have VMs to migrate, so no load balancing is possible.
@@ -1240,114 +1335,8 @@ public class HostAgent extends Agent {
         return null; // if no agent was selected for any reason return a null host description. This will reject all the participant agents' proposals. 
     }
 
-    /// END     WORKING ON DANIEL
-/*
-    private Decision selectHostAgentBasedOnCoalitionUtility(Vector responses, int loadBalancingCause) {
-        try {
 
-            switch (loadBalancingCause) {
 
-                case Consts.MIGRATION_CAUSE_HIGH_CPU: // select a recipient host agent at random and select one of this host agent's virtual machines at random.
-                    ACLMessage msgOfSelectedHostAgentHighCPU = (ACLMessage) responses.get((new Random()).nextInt(responses.size())); // select a host agent at random.
-                    HostDescription selectedHostHighCPU = (HostDescription) msgOfSelectedHostAgentHighCPU.getContentObject();
-                    VirtualMachineDescription selectedVMHighCPU = hostDescription.getVirtualMachinesHosted().get((new Random()).nextInt(hostDescription.getVirtualMachinesHosted().size()));// select one of my VMs at random.                        
-                    if (selectedVMHighCPU != null && selectedHostHighCPU != null) {
-                        if ((selectedVMHighCPU.getNumberOfVirtualCores() <= selectedHostHighCPU.getAvailableVirtualCores()) && (selectedVMHighCPU.getMemory() <= selectedHostHighCPU.getAvailableMemory())) {
-                            return new Decision(this.hostDescription, selectedHostHighCPU, selectedVMHighCPU, Consts.DECISION_TYPE_MIGRATE_FROM_A_TO_B);
-                        } else {
-                            return new Decision(new HostDescription(), new HostDescription(), selectedVMHighCPU, Consts.DECISION_TYPE_DONT_MIGRATE);
-                        }
-
-                    } else {
-                        if (!Consts.LOG) System.out.println("ERROR: No host agent was selected because no one replied - Consts.MIGRATION_CAUSE_HIGH_CPU");
-                        return new Decision(new HostDescription(), new HostDescription(), new VirtualMachineDescription(), Consts.DECISION_TYPE_DONT_MIGRATE);
-                    }
-
-                case Consts.MIGRATION_CAUSE_LOW_CPU: // select an external host agent at random and select one of his virtual machines at random.
-                    ArrayList<HostDescription> possibleCPUHosts = new ArrayList<>();
-                    Enumeration eCPU = responses.elements();
-                    while (eCPU.hasMoreElements()) {
-                        HostDescription host = (HostDescription) ((ACLMessage) eCPU.nextElement()).getContentObject();
-                        if (host != null) {
-                            if (host.getVirtualMachinesHosted() != null) {
-                                if (host.getVirtualMachinesHosted().size() > 0) // if the host has VMs add it to the pool of possible hosts.
-                                {
-                                    possibleCPUHosts.add(host);
-                                }
-                            }
-                        }
-                    }
-                    HostDescription selectedHostLowCPU;
-                    VirtualMachineDescription selectedVMLowCPU;
-                    if (possibleCPUHosts.size() > 0) {
-                        selectedHostLowCPU = possibleCPUHosts.get((new Random()).nextInt(possibleCPUHosts.size()));
-                        selectedVMLowCPU = selectedHostLowCPU.getVirtualMachinesHosted().get((new Random()).nextInt(selectedHostLowCPU.getVirtualMachinesHosted().size()));// select one of his VMs at random.                            
-                        if ((selectedVMLowCPU.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (selectedVMLowCPU.getMemory() <= hostDescription.getAvailableMemory())) {
-                            return new Decision(selectedHostLowCPU, this.hostDescription, selectedVMLowCPU, Consts.DECISION_TYPE_MIGRATE_FROM_B_TO_A);
-                        } else {
-                            return new Decision(new HostDescription(), new HostDescription(), selectedVMLowCPU, Consts.DECISION_TYPE_DONT_MIGRATE);
-                        }
-                    } else { // External host agents do not have VMs to migrate, so no load balancing is possible.
-                        if (!Consts.LOG) System.out.println("ERROR: No host agent was selected because no one replied - Consts.MIGRATION_CAUSE_LOW_CPU");
-                        return new Decision(new HostDescription(), new HostDescription(), new VirtualMachineDescription(), Consts.DECISION_TYPE_DONT_MIGRATE);
-                    }
-
-                case Consts.MIGRATION_CAUSE_HIGH_MEMORY: // select a recipient host agent at random and select one of this host agent's virtual machines at random.
-                    ACLMessage msgOfSelectedHostAgentHighMemory = (ACLMessage) responses.get((new Random()).nextInt(responses.size())); // select a host agent at random.
-                    HostDescription selectedHostHighMemory = (HostDescription) msgOfSelectedHostAgentHighMemory.getContentObject();
-                    VirtualMachineDescription selectedVMHighMemory = hostDescription.getVirtualMachinesHosted().get((new Random()).nextInt(hostDescription.getVirtualMachinesHosted().size()));// select one of my VMs at random.                        
-                    if (selectedVMHighMemory != null && selectedHostHighMemory != null) {
-                        if ((selectedVMHighMemory.getNumberOfVirtualCores() <= selectedHostHighMemory.getAvailableVirtualCores()) && (selectedVMHighMemory.getMemory() <= selectedHostHighMemory.getAvailableMemory())) {
-                            return new Decision(this.hostDescription, selectedHostHighMemory, selectedVMHighMemory, Consts.DECISION_TYPE_MIGRATE_FROM_A_TO_B);
-                        } else {
-                            return new Decision(new HostDescription(), new HostDescription(), selectedVMHighMemory, Consts.DECISION_TYPE_DONT_MIGRATE);
-                        }
-
-                    } else {
-                        if (!Consts.LOG) System.out.println("ERROR: No host agent was selected because no one replied - Consts.MIGRATION_CAUSE_HIGH_MEMORY");
-                        return new Decision(new HostDescription(), new HostDescription(), new VirtualMachineDescription(), Consts.DECISION_TYPE_DONT_MIGRATE);
-                    }
-
-                case Consts.MIGRATION_CAUSE_LOW_MEMORY:
-                    ArrayList<HostDescription> possibleMemoryHosts = new ArrayList<>();
-                    Enumeration eMemory = responses.elements();
-                    while (eMemory.hasMoreElements()) {
-                        HostDescription host = (HostDescription) ((ACLMessage) eMemory.nextElement()).getContentObject();
-                        if (host != null) {
-                            if (host.getVirtualMachinesHosted() != null) {
-                                if (host.getVirtualMachinesHosted().size() > 0) // if the host has VMs add it to the pool of possible hosts.
-                                {
-                                    possibleMemoryHosts.add(host);
-                                }
-                            }
-                        }
-                    }
-                    HostDescription selectedHostLowMemory;
-                    VirtualMachineDescription selectedVMLowMemory;
-                    if (possibleMemoryHosts.size() > 0) {
-                        selectedHostLowMemory = possibleMemoryHosts.get((new Random()).nextInt(possibleMemoryHosts.size()));
-                        selectedVMLowMemory = selectedHostLowMemory.getVirtualMachinesHosted().get((new Random()).nextInt(selectedHostLowMemory.getVirtualMachinesHosted().size()));// select one of his VMs at random.                            
-                        if ((selectedVMLowMemory.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (selectedVMLowMemory.getMemory() <= hostDescription.getAvailableMemory())) {
-                            return new Decision(selectedHostLowMemory, this.hostDescription, selectedVMLowMemory, Consts.DECISION_TYPE_MIGRATE_FROM_B_TO_A);
-                        } else {
-                            return new Decision(new HostDescription(), new HostDescription(), selectedVMLowMemory, Consts.DECISION_TYPE_DONT_MIGRATE);
-                        }
-                    } else { // External host agents do not have VMs to migrate, so no load balancing is possible.
-                        if (!Consts.LOG) System.out.println("ERROR: No host agent was selected because no one replied - Consts.MIGRATION_CAUSE_LOW_MEMORY");
-                        return new Decision(new HostDescription(), new HostDescription(), new VirtualMachineDescription(), Consts.DECISION_TYPE_DONT_MIGRATE);
-                    }
-
-                default:
-                    if (!Consts.LOG) System.out.println("Error: Unknown load balancing cause");
-                    return null;
-            }
-        } catch (UnreadableException ex) {
-            if (Consts.EXCEPTIONS) System.out.println(ex);
-        }
-        if (!Consts.LOG) System.out.println("Error: For some reason, no agent was selected");
-        return null; // if no agent was selected for any reason return a null host description. This will reject all the participant agents' proposals. 
-    }
-     */
     private class CNPInitiatorForIntraLoadBalancingAtoB extends OneShotBehaviour { // Initiator of Contract Net Protocol for VM Migration
 
         private Agent agt;
@@ -1428,75 +1417,112 @@ public class HostAgent extends Agent {
                             }
                         }
 
+                        // Filter out all the responses from all the host unwilling or unable to participate
+                        int k = 0;
+                        Vector responsesFromNotFailedHAs = new Vector<HostDescription>();
+                        Vector responsesFromWillingNotFailedHAs = new Vector<HostDescription>();
+                        //System.out.println(responses.size());
+                        while (k < responses.size()) {// responses from all the (PARTICIPANT) hosts
+                            try {
+                                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(k)).getContentObject();
+                                if (!participantHost.isFailed()){
+                                    //System.out.println(participantHost.getId()+" was added to NotFailed");
+                                    responsesFromNotFailedHAs.add(responses.get(k));
+                                    if (participantHost.isWillingToParticipateInCNP()){
+                                        //System.out.println(participantHost.getId()+" was also added to WillingToParticipate");
+                                        responsesFromWillingNotFailedHAs.add(responses.get(k));
+                                    } else {
+                                        //System.out.println(participantHost.getId()+" is unwilling");
+                                    }
+                                } else {
+                                    //System.out.println(participantHost.getId()+" has a failed status");
+                                }
+                           } catch (UnreadableException ex){
+                                System.out.println(ex);
+                            }
+                            k++;
+                        }
+
 
 
                         if (responses.size() > 0) {
+
                             boolean proposalAccepted = false;
-                            if (responses.size() > 0) {
-                                //////////////////// Simple and random selection of hostAgents. This should be done based on the coalition's utility
-                                decision = selectHostAgentBasedOnCoalitionUtility(responses, loadBalancingCause);
-                                if (decision != null) {
 
-                                    // Updating thresholds based on current load
-                                    int[] thresholds = calculateNewThresholds(responses);
-                                    // thresholds[0]  low CPU 
-                                    // thresholds[1]  high CPU 
-                                    // thresholds[2]  low Memory 
-                                    // thresholds[3]  high Memory                                    
-                                    decision.setLowMigrationThresholdForCPU(thresholds[0]);
-                                    decision.setHighMigrationThresholdForCPU(thresholds[1]);
-                                    decision.setLowMigrationThresholdForMemory(thresholds[2]);
-                                    decision.setHighMigrationThresholdForMemory(thresholds[3]);
+                            if (responsesFromWillingNotFailedHAs.size() > 0) {
+                                decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs,
+                                        loadBalancingCause);
+                            } else {
+                                decision = new Decision();
+                            }
 
-                                    hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
-                                    hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
-                                    hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
-                                    hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
-                                    if (!Consts.LOG) {
-                                        System.out.println("I " + agt.getAID() + " updated his migration thresholds because it initiated A to B CNP ");
-                                    }
-                                    ACLMessage msg;
-                                    ACLMessage reply;
-                                    for (int i=0; i< responses.size(); i++) {
-                                        msg = (ACLMessage) responses.get(i);
-                                        if (msg.getPerformative() == ACLMessage.PROPOSE) {
-                                            reply = msg.createReply();
-                                            if (msg.getSender().getLocalName().equals(decision.getDestinationHost().getId())) {
-                                                try {
-                                                    reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+                            int[] thresholds = {0,
+                                    configuration.getTARGET_STD_DEV(),
+                                    0,
+                                    configuration.getTARGET_STD_DEV()};
 
-                                                    //reply.setContent(agt.getContainerController().getContainerName());
-                                                    reply.setContentObject(decision);
-                                                    acceptances.addElement(reply);
-                                                    proposalAccepted = true;
-                                                    if (!Consts.LOG) {
-                                                        System.out.println("ACCEPT - " + msg.getSender().getLocalName() + " = " + decision.getDestinationHost().getId());
-                                                    }
-                                                } catch (Exception ex) {
-                                                    if (Consts.EXCEPTIONS) {
-                                                        System.out.println("It is here 27" + ex);
-                                                    }
-                                                }
-                                            } else {
-                                                try {
-                                                    if (!Consts.LOG) {
-                                                        System.out.println("REJECT - " + msg.getSender().getLocalName() + " = " + decision.getDestinationHost().getId());
-                                                    }
-                                                    reply.setContentObject(decision);
-                                                    reply.setPerformative(ACLMessage.REJECT_PROPOSAL);
-                                                    acceptances.addElement(reply);
-                                                } catch (IOException ex) {
-                                                    if (Consts.EXCEPTIONS) {
-                                                        System.out.println("Is it here 2" + ex);
-                                                    }
-                                                }
+                            if (responsesFromNotFailedHAs.size() > 0) {
+                                thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
+                            }
+                            // thresholds[0]  low CPU
+                            decision.setLowMigrationThresholdForCPU(thresholds[0]);
+                            // thresholds[1]  high CPU
+                            decision.setHighMigrationThresholdForCPU(thresholds[1]);
+                            // thresholds[2]  low Memory
+                            decision.setLowMigrationThresholdForMemory(thresholds[2]);
+                            // thresholds[3]  high Memory
+                            decision.setHighMigrationThresholdForMemory(thresholds[3]);
+                            hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
+                            hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
+                            hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
+                            hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+
+
+                            ACLMessage msg;
+                            ACLMessage reply;
+                            for (int i = 0; i < responses.size(); i++) {
+                                msg = (ACLMessage) responses.get(i);
+                                if (msg.getPerformative() == ACLMessage.PROPOSE) {
+                                    reply = msg.createReply();
+                                    if (msg.getSender().getLocalName().equals(decision.getDestinationHost().getId())) {
+                                        try {
+                                            reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+
+                                            //reply.setContent(agt.getContainerController().getContainerName());
+                                            reply.setContentObject(decision);
+                                            acceptances.addElement(reply);
+                                            proposalAccepted = true;
+                                            if (!Consts.LOG) {
+                                                System.out.println("ACCEPT - " + msg.getSender().getLocalName() + " = " + decision.getDestinationHost().getId());
+                                            }
+                                        } catch (Exception ex) {
+                                            if (Consts.EXCEPTIONS) {
+                                                System.out.println("It is here 27" + ex);
+                                            }
+                                        }
+                                    } else {
+                                        try {
+                                            if (!Consts.LOG) {
+                                                System.out.println("REJECT - " + msg.getSender().getLocalName() + " = " + decision.getDestinationHost().getId());
+                                            }
+                                            reply.setContentObject(decision);
+                                            reply.setPerformative(ACLMessage.REJECT_PROPOSAL);
+                                            acceptances.addElement(reply);
+                                        } catch (IOException ex) {
+                                            if (Consts.EXCEPTIONS) {
+                                                System.out.println("Is it here 2" + ex);
                                             }
                                         }
                                     }
-
                                 }
-
                             }
+
+
+
+
+
+
+
                             if (proposalAccepted) {
                                 if (!Consts.LOG) {
                                     System.out.println("Agent " + decision.getDestinationHost().getId() + " was selected for Load Balancing from A to B. Load balancing cause " + loadBalancingCause);
@@ -1647,71 +1673,103 @@ public class HostAgent extends Agent {
                             }
                         }
 
-                        if (responses.size() > 0) {
-                            boolean proposalAccepted = false;
-
-
-                            if (responses.size() > 0) {
-
-                                //////////////////// Simple and random selection of hostAgents. This should be done based on the coalition's utility
-                                decision = selectHostAgentBasedOnCoalitionUtility(responses, loadBalancingCause);
-
-                                if (decision != null) {
-
-                                    // Updating thresholds based on current load
-                                    int[] thresholds = calculateNewThresholds(responses);
-                                    // thresholds[0]  low CPU 
-                                    // thresholds[1]  high CPU 
-                                    // thresholds[2]  low Memory 
-                                    // thresholds[3]  high Memory                                    
-                                    decision.setLowMigrationThresholdForCPU(thresholds[0]);
-                                    decision.setHighMigrationThresholdForCPU(thresholds[1]);
-                                    decision.setLowMigrationThresholdForMemory(thresholds[2]);
-                                    decision.setHighMigrationThresholdForMemory(thresholds[3]);
-
-                                    hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
-                                    hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
-                                    hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
-                                    hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
-                                    if (!Consts.LOG) {
-                                        if (!Consts.LOG) {
-                                            System.out.println("I " + agt.getAID() + " updated his migration thresholds because it initiated B to A CNP ");
-                                        }
+                        // Filter out all the responses from all the host unwilling or unable to participate
+                        int k = 0;
+                        Vector responsesFromNotFailedHAs = new Vector<HostDescription>();
+                        Vector responsesFromWillingNotFailedHAs = new Vector<HostDescription>();
+                        //System.out.println(responses.size());
+                        while (k < responses.size()) {// responses from all the (PARTICIPANT) hosts
+                            try {
+                                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(k)).getContentObject();
+                                if (!participantHost.isFailed()){
+                                    //System.out.println(participantHost.getId()+" was added to NotFailed");
+                                    responsesFromNotFailedHAs.add(responses.get(k));
+                                    if (participantHost.isWillingToParticipateInCNP()){
+                                        //System.out.println(participantHost.getId()+" was also added to WillingToParticipate");
+                                        responsesFromWillingNotFailedHAs.add(responses.get(k));
+                                    } else {
+                                        //System.out.println(participantHost.getId()+" is unwilling");
                                     }
-                                    ACLMessage msg;
-                                    ACLMessage reply;
-                                    for (int i=0; i<responses.size(); i++){
-                                        msg = (ACLMessage) responses.get(i);
-                                        if (msg.getPerformative() == ACLMessage.PROPOSE) {
-                                            reply = msg.createReply();
+                                } else {
+                                    //System.out.println(participantHost.getId()+" has a failed status");
+                                }
+                            } catch (UnreadableException ex){
+                                System.out.println(ex);
+                            }
+                            k++;
+                        }
 
-                                            if (msg.getSender().getLocalName().equals(decision.getSourceHost().getId())) {
-                                                try {
-                                                    reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
-                                                    reply.setContentObject(decision);
-                                                    acceptances.addElement(reply);
-                                                    proposalAccepted = true;
-                                                    if (!Consts.LOG) {
-                                                        System.out.println("ACCEPT - " + msg.getSender().getLocalName() + " = " + decision.getSourceHost().getId());
-                                                    }
-                                                } catch (IOException ex) {
-                                                    if (Consts.EXCEPTIONS) {
-                                                        System.out.println("It is here 28" + ex);
-                                                    }
-                                                }
-                                            } else {
-                                                try {
-                                                    if (!Consts.LOG) {
-                                                        System.out.println("REJECT - " + msg.getSender().getLocalName() + " = " + decision.getSourceHost().getId());
-                                                    }
-                                                    reply.setContentObject(decision);
-                                                    reply.setPerformative(ACLMessage.REJECT_PROPOSAL);
-                                                    acceptances.addElement(reply);
-                                                } catch (Exception ex) {
-                                                    if (Consts.EXCEPTIONS) {
-                                                        System.out.println("It is here 29" + ex);
-                                                    }
-                                                }
+
+                        if (responses.size() > 0) {
+
+                            boolean proposalAccepted = false;
+                            //System.out.println("S" + responsesFromWillingNotFailedHAs);
+                            //System.out.println("L " + loadBalancingCause);
+
+                            if (responsesFromWillingNotFailedHAs.size() > 0) {
+                                decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs,
+                                        loadBalancingCause);
+                            } else {
+                                decision = new Decision();
+                            }
+                            //System.out.println(decision);
+                            int[] thresholds = {0,
+                                    configuration.getTARGET_STD_DEV(),
+                                    0,
+                                    configuration.getTARGET_STD_DEV()};
+
+                            if (responsesFromNotFailedHAs.size() > 0) {
+                                thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
+                            }
+                            // thresholds[0]  low CPU
+                            decision.setLowMigrationThresholdForCPU(thresholds[0]);
+                            // thresholds[1]  high CPU
+                            decision.setHighMigrationThresholdForCPU(thresholds[1]);
+                            // thresholds[2]  low Memory
+                            decision.setLowMigrationThresholdForMemory(thresholds[2]);
+                            // thresholds[3]  high Memory
+                            decision.setHighMigrationThresholdForMemory(thresholds[3]);
+                            hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
+                            hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
+                            hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
+                            hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+
+
+                            ACLMessage msg;
+                            ACLMessage reply;
+                            for (int i = 0; i < responses.size(); i++) {
+                                msg = (ACLMessage) responses.get(i);
+                                if (msg.getPerformative() == ACLMessage.PROPOSE) {
+                                    reply = msg.createReply();
+                                    if (msg.getSender().getLocalName().equals(decision.getSourceHost().getId())) {
+                                        try {
+                                            reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+
+                                            //reply.setContent(agt.getContainerController().getContainerName());
+                                            reply.setContentObject(decision);
+                                            //System.out.println("A PROPOSAL WAS ACCEPTED");
+                                            acceptances.addElement(reply);
+                                            proposalAccepted = true;
+                                            if (!Consts.LOG) {
+                                                System.out.println("ACCEPT - " + msg.getSender().getLocalName() + " = " + decision.getSourceHost().getId());
+                                            }
+                                        } catch (Exception ex) {
+                                            if (Consts.EXCEPTIONS) {
+                                                System.out.println("It is here 27" + ex);
+                                            }
+                                        }
+                                    } else {
+                                        try {
+                                            if (!Consts.LOG) {
+                                                System.out.println("REJECT - " + msg.getSender().getLocalName() + " = " + decision.getSourceHost().getId());
+                                            }
+                                            reply.setContentObject(decision);
+                                            reply.setPerformative(ACLMessage.REJECT_PROPOSAL);
+                                            //System.out.println("A PROPOSAL WAS REJECTED");
+                                            acceptances.addElement(reply);
+                                        } catch (IOException ex) {
+                                            if (Consts.EXCEPTIONS) {
+                                                System.out.println("Is it here 2" + ex);
                                             }
                                         }
                                     }
@@ -1722,20 +1780,25 @@ public class HostAgent extends Agent {
                                 if (!Consts.LOG) {
                                     System.out.println("Agent " + decision.getSourceHost().getId() + " was selected for Load Balancing from B to A. Load balancing cause " + loadBalancingCause);
                                 }
-                                //Once the VM has been received or migrated inProgress will be set to false
-                            } else { // if the VM was not accepted for any member of coalition, unlock it
+
+                            } else { // if the VM was not accepted for any member of coalition, unlock it and start inter_load balancing if enabled.
                                 if (!Consts.LOG) {
-                                    System.out.println("No agent was selected for Load Balancing from B to A. Load balancing cause " + loadBalancingCause);
+                                    System.out.println("No agent was selected for Intra Load Balancing from B to A. Load balancing cause " + loadBalancingCause);
                                 }
                                 if (!Consts.LOG) {
                                     System.out.println("The decision was " + decision.getDecision());
                                 }
-                                resetAverageUsages();
-                                resetCounters();
-                                resetThresholdFlags();
-                                hostDescription.setInProgress(false);
+
+                                if (Consts.INTER_LOAD_BALANCING_ENABLED && (decision.getDecision() == Consts.DECISION_TYPE_DONT_MIGRATE)) { // enact inter load balancing protocol
+                                    // enact inter load balancing protocol
+                                } else { //if inter load balancing is not enabled then just clean up and reset thresholds
+                                    resetAverageUsages();
+                                    resetCounters();
+                                    resetThresholdFlags();
+                                    hostDescription.setInProgress(false);
+                                }
                             }
-                        } else { // if no agent replied to the cfp, unlock vm 
+                        } else { // if no agent replied to the cfp, unlock vm
                             if (!Consts.LOG) {
                                 System.out.println("No agent replied to cfp. Load balancing cause " + loadBalancingCause);
                             }
@@ -1808,9 +1871,10 @@ public class HostAgent extends Agent {
                 protected ACLMessage handleCfp(ACLMessage cfp) throws NotUnderstoodException, RefuseException {
                     resetAverageUsages();
                     resetCounters();
+                    //System.out.println("HEY");
                     return handleCallForProposals(agt, cfp);  // handleCallForProposals sets inProgress to true; 
                 }
-
+// B TO A
                 @Override
                 protected ACLMessage handleAcceptProposal(ACLMessage cfp, ACLMessage propose, ACLMessage accept) throws FailureException {
                     ACLMessage inform = accept.createReply();
@@ -1853,15 +1917,23 @@ public class HostAgent extends Agent {
                 @Override
                 protected void handleRejectProposal(ACLMessage cfp, ACLMessage propose, ACLMessage reject) {
                     try {
+                        Decision decision = (Decision) reject.getContentObject();
+
+                        if (!failed) {
+                            hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
+                            hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
+                            hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
+                            hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                        } else {
+                            hostDescription.setLowMigrationThresholdForCPU(0);
+                            hostDescription.setHighMigrationThresholdForCPU(configuration.getTARGET_STD_DEV());
+                            hostDescription.setLowMigrationThresholdForMemory(0);
+                            hostDescription.setHighMigrationThresholdForMemory(configuration.getTARGET_STD_DEV());
+                        }
+
                         if (!Consts.LOG) {
                             System.out.println("I " + agt.getAID() + " updated his migration thresholds because of rejection BtoA");
                         }
-                        Decision decision = (Decision) reject.getContentObject();
-                        hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
-                        hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
-                        hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
-                        hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
-
                         if (!Consts.LOG) {
                             System.out.println("Agent " + getLocalName() + " got proposal rejected");
                         }
@@ -1871,7 +1943,7 @@ public class HostAgent extends Agent {
                         hostDescription.setInProgress(false); // if proposal rejected release the agent so it can participate in other CNPs
                     } catch (Exception ex) {
                         if (Consts.EXCEPTIONS) {
-                            System.out.println("It is here 32" + ex);
+                            System.out.println("It is here 32: " + ex);
                         }
                     }
                 }
@@ -1917,6 +1989,7 @@ public class HostAgent extends Agent {
                 protected ACLMessage handleAcceptProposal(ACLMessage cfp, ACLMessage propose, ACLMessage accept) throws FailureException {
                     ACLMessage inform = accept.createReply();
                     try {
+
                         Decision decision = (Decision) accept.getContentObject();
 
                         inform.setPerformative(ACLMessage.INFORM);
@@ -1944,10 +2017,19 @@ public class HostAgent extends Agent {
                 protected void handleRejectProposal(ACLMessage cfp, ACLMessage propose, ACLMessage reject) {
                     try {
                         Decision decision = (Decision) reject.getContentObject();
-                        hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
-                        hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
-                        hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
-                        hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+
+                        if (!failed) {
+                            hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
+                            hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
+                            hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
+                            hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                        } else {
+                            hostDescription.setLowMigrationThresholdForCPU(0);
+                            hostDescription.setHighMigrationThresholdForCPU(configuration.getTARGET_STD_DEV());
+                            hostDescription.setLowMigrationThresholdForMemory(0);
+                            hostDescription.setHighMigrationThresholdForMemory(configuration.getTARGET_STD_DEV());
+                        }
+
                         if (!Consts.LOG) {
                             System.out.println("I " + agt.getAID() + " updated his migration thresholds because of rejection AtoB");
                         }
@@ -1973,11 +2055,11 @@ public class HostAgent extends Agent {
         try {
             result = cfp.createReply();
             result.setPerformative(ACLMessage.PROPOSE);
-            if (!hostDescription.isInProgress()) {
-                hostDescription.setInProgress(true);
-                hostDescription.setWillingToParticipateInCNP(true);
-            } else if (hostDescription.isInProgress()) { // If there are already some locked/compromised resources, simply refuse to participate in CFPs.
-                hostDescription.setWillingToParticipateInCNP(false);
+            if (!hostDescription.isInProgress() && !failed) {
+                    hostDescription.setInProgress(true);
+                    hostDescription.setWillingToParticipateInCNP(true);
+            } else {// If there are already some locked/compromised resources or the host has failed, simply refuse to participate in CFPs.
+                    hostDescription.setWillingToParticipateInCNP(false);
             }
             result.setContentObject(hostDescription);
         } catch (Exception ex) {

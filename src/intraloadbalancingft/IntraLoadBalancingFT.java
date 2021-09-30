@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package intraloadbalancing;
+package intraloadbalancingft;
 
 /**
  * @author octavio
@@ -14,10 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
-import java.util.Random;
-import java.util.logging.Level;
 import java.util.logging.LogManager;
-import java.util.logging.Logger;
 
 import com.tinkerpop.blueprints.Graph;
 
@@ -25,7 +22,7 @@ import com.tinkerpop.blueprints.Graph;
  *
  * @author octavio
  */
-public class IntraLoadBalancing {
+public class IntraLoadBalancingFT {
 
     private static ExperimentRunConfiguration configuration;
 
@@ -73,43 +70,57 @@ public class IntraLoadBalancing {
                     // args 8 : output directory
                     // args 9 : VMWARE_MAX_MIGRATIONS
 
-/*
-            args = new String[10];
-            args [0]= "1";
-            args [1]= "big_fat_tree_datacenterCoalitions4_4.XML";
-            args [2]= "10";
-            args [3]= "10000";
-            args [4]= "INTRA";
-            args [5]= "1";
-            args [6]= "EXHAUSTIVE";
-            args [7]= "fat_trees";
-            args [8]= "RESULTS";
-            args [9]= "10000";
-*/
+
             String XML_FILE = "./fat_trees/big_fat_tree_datacenterCoalitions8_1.XML";
             String fileSufix ="";
             String outputDirectory = "./";
             int initialPort = 30000;
+
             if (args != null) {
                 if (args.length > 0) {
-
-
-
                     configuration = new ExperimentRunConfiguration(Integer.valueOf(args[2]), Integer.valueOf(args[3]), args[4], Integer.valueOf(args[5]), 0, Integer.valueOf(args[2]), 0, Integer.valueOf(args[2]), args[6], Integer.valueOf(args[9]) );
-
                     if (configuration.getLOAD_BALANCING_TYPE()== Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS){
                         fileSufix = args[0]+ "_"+  args[1] + "_"+  args[2] + "_"+  args[3] + "_"+  args[4] + "_"+  args[5] + "_"+  args[6] + "_"+  args[7] + "_"+  args[8];
                     } else {
                         fileSufix = args[0]+ "_"+  args[1] + "_"+  args[2] + "_"+  args[3] + "_"+  args[4] + "_"+  args[6] + "_"+  args[7] + "_"+  args[8] + "_"+  args[9];
                     }
-
                     XML_FILE = "./"+args[7]+"/"+args[1];
                     outputDirectory ="./"+args[8]+"/";
-
                 }
-     //           if (args.length > 1) {
-     //               initialPort = Integer.valueOf(args[1]);
-    //            }
+            }
+            if (args != null) { // default values to be executed for testing purposes
+                if (args.length == 0) {
+                    String[] defaultArgs = new String[10];
+                    defaultArgs[0] = "0";
+                    //defaultArgs[1] = "big_fat_tree_datacenterCoalitions4_2.XML";
+                    defaultArgs[1] = "small_big_fat_tree.XML";
+                    defaultArgs[2] = "1";
+                    defaultArgs[3] = "1000"; // NUMBER_OF_VMS
+                    defaultArgs[4] = "INTRA";
+                    defaultArgs[5] = "1";
+                    defaultArgs[6] = "EXHAUSTIVE";
+                    defaultArgs[7] = "fat_trees";
+                    defaultArgs[8] = "results";
+                    defaultArgs[9] = "0";
+
+                    configuration = new ExperimentRunConfiguration(Integer.valueOf(defaultArgs[2]),
+                            Integer.valueOf(defaultArgs[3]),
+                            defaultArgs[4],
+                            Integer.valueOf(defaultArgs[5]), 0,
+                            Integer.valueOf(defaultArgs[2]), 0,
+                            Integer.valueOf(defaultArgs[2]),
+                            defaultArgs[6],
+                            Integer.valueOf(defaultArgs[9]));
+
+                    if (configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
+                        fileSufix = defaultArgs[0] + "_" + defaultArgs[1] + "_" + defaultArgs[2] + "_" + defaultArgs[3] + "_" + defaultArgs[4] + "_" + defaultArgs[5] + "_" + defaultArgs[6] + "_" + defaultArgs[7] + "_" + defaultArgs[8];
+                    } else {
+                        fileSufix = defaultArgs[0] + "_" + defaultArgs[1] + "_" + defaultArgs[2] + "_" + defaultArgs[3] + "_" + defaultArgs[4] + "_" + defaultArgs[6] + "_" + defaultArgs[7] + "_" + defaultArgs[8] + "_" + defaultArgs[9];
+                    }
+
+                    XML_FILE = "./" + defaultArgs[7] + "/" + defaultArgs[1];
+                    outputDirectory = "./" + defaultArgs[8] + "/";
+                }
             }
 
             //System.out.println("Hi-1");
@@ -240,12 +251,12 @@ public class IntraLoadBalancing {
             allocatorAgentParams[2] = configuration;
 
             // Starting allocator agent
-            allocatorContainer.createNewAgent("AllocatorAgent", "intraloadbalancing.AllocatorAgent", allocatorAgentParams);
+            allocatorContainer.createNewAgent("AllocatorAgent", "intraloadbalancingft.AllocatorAgent", allocatorAgentParams);
             allocatorContainer.getAgent("AllocatorAgent").start();
 
             // Starting host agents
             for (int i = 0; i < dataCenterStructure.size(); i++) {
-                Object[] hostAgentParams = new Object[7];
+                Object[] hostAgentParams = new Object[8];
                 HostDescription xHost = dataCenterStructure.get(i).getHostDescription();
                 Hashtable neighborsDistance = dataCenterStructure.get(i).getNeighbors();//Weights of neighbors 
                 ArrayList<String> membersOfCoalition = dataCenterStructure.get(i).getMembersOfCoalition();
@@ -258,8 +269,8 @@ public class IntraLoadBalancing {
                 hostAgentParams[4] = listEdges;
                 hostAgentParams[5] = neighborsDistance;
                 hostAgentParams[6] = configuration;
-
-                hostContainers[i].createNewAgent(xHost.getId(), "intraloadbalancing.HostAgent", hostAgentParams);
+                hostAgentParams[7] = 0.05; //failureProbability TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
+                hostContainers[i].createNewAgent(xHost.getId(), "intraloadbalancingft.HostAgent", hostAgentParams);
                 hostContainers[i].getAgent(xHost.getId()).start();
             }
 
@@ -272,7 +283,7 @@ public class IntraLoadBalancing {
                 Object[] workloadGeneratorContainerParams = new Object[1];
                 workloadGeneratorContainerParams[0] = configuration;
 
-                workloadGeneratorContainer.createNewAgent("WorkloadGeneratorAgent", "intraloadbalancing.WorkloadGeneratorAgent", workloadGeneratorContainerParams);
+                workloadGeneratorContainer.createNewAgent("WorkloadGeneratorAgent", "intraloadbalancingft.WorkloadGeneratorAgent", workloadGeneratorContainerParams);
                 workloadGeneratorContainer.getAgent("WorkloadGeneratorAgent").start();
             }
 

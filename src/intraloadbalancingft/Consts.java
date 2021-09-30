@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package intraloadbalancing;
+package intraloadbalancingft;
 
 /**
  * @author octavio
@@ -205,10 +205,14 @@ u-24tb1.metal 	448 	24576
     ////// **** Constants for debugging purposes and/or keeping a log **** ///////   
     public static final boolean EXCEPTIONS = true; // If enable prints exceptions
     public static final boolean LOG = true; // If (true) only prints experiment's data, otherwise it prints all the information for debugging purposes
-    public static final boolean LOG_TO_FILE = true; // If (true) save data into output.txt else the system prints in console
+    public static final boolean LOG_TO_FILE = false; // If (true) save data into output.txt else the system prints in console
     public static final boolean HOST_AGENT_GUI = false; // Enable or Disable HostAgents' GUIs
     public static final boolean ALLOCATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
     public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI    
+
+    ////// **** Constants for Failure Management **** ///////
+    public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
+    public static final long TICKS_FOR_SWITCH_FAILURE_GENERATION = 1000; // ms
 
     private Consts() {
         throw new AssertionError();

@@ -1,4 +1,4 @@
-package intraloadbalancing;
+package intraloadbalancingft;
 
 public class ExperimentRunConfiguration {
     private int TARGET_STD_DEV;
