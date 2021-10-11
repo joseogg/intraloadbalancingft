@@ -664,6 +664,8 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
+
+            // TWO TYPES OF FAILURES HOST AND SWITCH
                 msg = receive(mt);
                 if (msg == null) {
                     block();
@@ -685,6 +687,8 @@ public class HostAgent extends Agent {
                 }
         }
     }
+
+
 
     private class VMWARE_RemoveAndMigrateVM extends CyclicBehaviour {
 

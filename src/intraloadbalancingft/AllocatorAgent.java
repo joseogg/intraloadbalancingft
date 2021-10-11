@@ -14,8 +14,7 @@ import jade.core.behaviours.TickerBehaviour;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Random;
+import java.util.*;
 import java.util.function.Predicate;
 
 /**
@@ -37,7 +36,19 @@ public class AllocatorAgent extends Agent {
 
     private static ExperimentRunConfiguration configuration;
 
+    private static Map<String, ArrayList<String>> switchToHosts;
+    //map.put("switchId", [HA1, HA2, ...] );
+    //map.get("switchId")); -> [HA1, HA2, ...]
+
+    private static Map<String, Integer> failedSwitches; // Integer -> number of ticks to remain failed
+    //map.put("switchId", 1000);
+    //map.get("switchId")); -> 1000
+
+
+
     public AllocatorAgent() {
+        switchToHosts = new HashMap<String, ArrayList<String>>();
+        failedSwitches = new HashMap<String, Integer>();
         possiblyCompromisedHosts = new ArrayList<HostDescription>();
         utils = new Utilities();
         conversationId = 0;
@@ -73,19 +84,100 @@ public class AllocatorAgent extends Agent {
 
     }
 
+
+    /*
+    *
+    *
+
+    CLASS ATTRIBUTES
+
+
+    private static Map<String, ArrayList<String>> switchToHosts;
+    //map.put("switchId", [HA1, HA2, ...] );
+    //map.get("switchId")); -> [HA1, HA2, ...]
+
+    private static Map<String, Integer> failedSwitches; // Integer -> number of ticks to remain failed
+    //map.put("switchId", 1000);
+    //map.get("switchId")); -> 1000
+
+
+    * */
+
+    private static ArrayList<String> causeFailuresAndGetHostsFromFailedSwitch(){
+        // Randomnly select ***unfailed*** switch or switches based on a probability distribution
+        // Set a failureTicksDuration for each failed switch and then
+        //switchToHosts;
+        return null;
+    }
+
+    private static ArrayList<String> updateFailureTicksAndGetHostsFromNoLongerFailedSwitches(){
+        //failedSwitches;
+        //switchToHosts;
+        return null;
+    }
+
     private class GenerateSwitchFailures extends TickerBehaviour {
 
         private ACLMessage msg;
+        private Agent agt;
 
         public GenerateSwitchFailures(Agent a, long period) {
             super(a, period);
+            this.agt = a;
         }
 
         @Override
         public synchronized void onTick() {
+            ArrayList<String> HostsFromRecentlyFailedSwitches = causeFailuresAndGetHostsFromFailedSwitch();
 
+            if (HostsFromRecentlyFailedSwitches != null) {
+                //for each host send message to disconnect hosts from the datacenter
+                ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                msg.setSender(agt.getAID());
+                msg.setConversationId(Consts.FAILURE_FROM_SWITCH);
+                msg.setContent("FAILED");
+                Iterator<String> hosts = HostsFromRecentlyFailedSwitches.iterator();
+                while (hosts.hasNext()) {
+                    String hostId = (String)hosts.next();
+                    AID to = new AID(hostId, AID.ISLOCALNAME);
+                    msg.addReceiver(to);
+                }
+                agt.send(msg);
+            }
+
+            ArrayList<String> HostsFromRecentlyUnfailedSwitches = updateFailureTicksAndGetHostsFromNoLongerFailedSwitches();
+            if (HostsFromRecentlyUnfailedSwitches != null) {
+                //for each host send message to connect hosts from the datacenter
+                ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                msg.setSender(agt.getAID());
+                msg.setConversationId(Consts.FAILURE_FROM_SWITCH);
+                msg.setContent("UNFAILED");
+                Iterator<String> hosts = HostsFromRecentlyUnfailedSwitches.iterator();
+                while (hosts.hasNext()) {
+                    String hostId = (String)hosts.next();
+                    AID to = new AID(hostId, AID.ISLOCALNAME);
+                    msg.addReceiver(to);
+                }
+                agt.send(msg);
+            }
+
+
+            //Conversion id for failure management between AllocatorAgent and HostAgents
             //public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
-            System.out.printf("HI");
+
+            //Create a dictionary of switches to keep track of their failure history
+            //this might be extracted from the xml file including the coalition structure
+
+            //using the dictionary determine what switches (randomly based on a distribution) will fail
+            //and for how long (randomly based on a distribution)
+
+            // if a switch failure occurs
+            //      Send a message to all the HostAgents associated with a given switch
+            //      update the dictionary of switches
+
+            // if failure period of a switch has reached the end of this failure period
+            //      Send a message to all the HostAgents associated with the unfailed switch
+            //      update the dictionary of switches
 
         }
     }
