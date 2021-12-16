@@ -9,28 +9,7 @@ package intraloadbalancingft;
  * @author octavio
  */
 public final class Consts {
-/*
-    public static final int TARGET_STD_DEV = 5;
-    public static final int NUMBER_OF_VMS = 3840;
-//        480	7
-//        1620	6
-//        3840	5
-//        7500	4
-//        12960	3
-
-
-    public static final int LOAD_BALANCING_TYPE = INTRA_DISTRIBUTED_FIXED_COALITIONS;
-
-    public static final boolean BALANCING_ONLY_ONE_COALITION_AT_A_TIME = false;
-
-    public static final int MIGRATION_THRESHOLD_FOR_LOW_CPU = 0; // from 0 to 100 %
-    public static final int MIGRATION_THRESHOLD_FOR_HIGH_CPU = TARGET_STD_DEV; // from 0 to 100 %
-    public static final int MIGRATION_THRESHOLD_FOR_LOW_MEMORY = 0; // from 0 to 100 %
-    public static final int MIGRATION_THRESHOLD_FOR_HIGH_MEMORY = TARGET_STD_DEV; // from 0 to 100 %
-
-
-    */
-    public static final int INTRA_DISTRIBUTED_FIXED_COALITIONS = 0;
+    public static final int DISTRIBUTED_FIXED_COALITIONS = 0;
     public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
 
     public static final String EXHAUSTIVE = "EXHAUSTIVE";
@@ -40,8 +19,6 @@ public final class Consts {
     ////// **** Constants for Workload Generation **** ///////
     public static final int AVG_INTERARRIVAL_TIME = 50; // in ms
     public static final int AVG_INTERDEPARTURE_TIME = 25000; // in ms
-
-
 
 
 //    public static final int AVG_INTERDEPARTURE_TIME = 20000; // in ms
@@ -55,9 +32,7 @@ public final class Consts {
 
     ////// **** Constants for Agent Platform **** ///////    
 
-        public static final int NUMBER_OF_LOG_RECORDS = 1000; // after NUMBER_OF_LOG_RECORDS the system stops.
-
-
+    public static final int NUMBER_OF_LOG_RECORDS = 1000; // after NUMBER_OF_LOG_RECORDS the system stops.
 
 
     public static final int MIGRATION_TRIGGER_BASED_ON_COUNTERS = 0; // how many times a given resource usage has violated a threshold within a moving time window
@@ -96,7 +71,8 @@ public final class Consts {
 
 
     ////// **** Constants for Host Agents  **** ///////
-    public static final boolean INTER_LOAD_BALANCING_ENABLED = false;
+    public static final boolean ONLY_INTRA_LOAD_BALANCING = false;
+
 
     public static final int MIGRATION_CAUSE_HIGH_CPU = 0;
     public static final int MIGRATION_CAUSE_LOW_CPU = 1;
@@ -169,8 +145,8 @@ u-24tb1.metal 	448 	24576
     public static final String CONVERSATION_REGISTRATION_DUE_TO_VM_MIGRATION = "CONVERSATION_REGISTRATION_DUE_TO_VM_MIGRATION";
 
     // conversation where host agents execute contract net protocol for Load Balancing
-    public static final String CONVERSATION_INTRA_LOAD_BALANCING_A_TO_B = "CONVERSATION_INTRA_LOAD_BALANCING_A_TO_B";
-    public static final String CONVERSATION_INTRA_LOAD_BALANCING_B_TO_A = "CONVERSATION_INTRA_LOAD_BALANCING_B_TO_A";
+    public static final String CONVERSATION_LOAD_BALANCING_A_TO_B = "CONVERSATION_LOAD_BALANCING_A_TO_B";
+    public static final String CONVERSATION_LOAD_BALANCING_B_TO_A = "CONVERSATION_LOAD_BALANCING_B_TO_A";
 
     // conversation where host agents execute contract net protocol for Migrating VMs
     public static final String CONVERSATION_VM_MIGRATION = "CONVERSATION_VM_MIGRATION";
@@ -194,6 +170,14 @@ u-24tb1.metal 	448 	24576
     public static final String CONVERSATION_RESET_COUNTERS = "CONVERSATION_RESET_COUNTERS";
     public static final String CONVERSATION_A_COALITION_WAS_JUST_BALANCED = "CONVERSATION_A_COALITION_WAS_JUST_BALANCED";
 
+
+
+    public static final String CONVERSATION_MODEL_UPDATE = "CONVERSATION_MODEL_UPDATE";
+    public static final String CONVERSATION_FAILURE_NOTIFICATION = "CONVERSATION_FAILURE_NOTIFICATION";
+    public static final String CONVERSATION_FAILURE_SUMMARY_FROM_LEADERS = "CONVERSATION_FAILURE_SUMMARY_FROM_LEADERS";
+
+
+
     ////// **** Constants for Emulation of VM resource usage **** ///////
     public static final int LOW_LONGTERM_MEAN_FOR_CPU_USAGE = 50;
     public static final int MEDIUM_LONGTERM_MEAN_FOR_CPU_USAGE = 75;
@@ -206,13 +190,15 @@ u-24tb1.metal 	448 	24576
     public static final boolean EXCEPTIONS = true; // If enable prints exceptions
     public static final boolean LOG = true; // If (true) only prints experiment's data, otherwise it prints all the information for debugging purposes
     public static final boolean LOG_TO_FILE = false; // If (true) save data into output.txt else the system prints in console
-    public static final boolean HOST_AGENT_GUI = false; // Enable or Disable HostAgents' GUIs
+    public static final boolean HOST_AGENT_GUI = true; // Enable or Disable HostAgents' GUIs
     public static final boolean ALLOCATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
-    public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI    
+    public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
 
     ////// **** Constants for Failure Management **** ///////
+    public static final boolean FAILURES_ARE_ENABLED = true;
     public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
     public static final long TICKS_FOR_SWITCH_FAILURE_GENERATION = 1000; // ms
+
 
     private Consts() {
         throw new AssertionError();

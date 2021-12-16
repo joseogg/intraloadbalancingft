@@ -32,7 +32,7 @@ public class ExperimentRunConfiguration {
             this.LOAD_BALANCING_TYPE = 1;
         else
             this.LOAD_BALANCING_TYPE = -1;
-        if (ONLY_ONE_COALITION_AT_A_TIME==0)
+        if (ONLY_ONE_COALITION_AT_A_TIME == 0)
             this.BALANCING_ONLY_ONE_COALITION_AT_A_TIME = false;
         else
             this.BALANCING_ONLY_ONE_COALITION_AT_A_TIME = true;
@@ -40,7 +40,7 @@ public class ExperimentRunConfiguration {
         this.MIGRATION_THRESHOLD_FOR_HIGH_CPU = MIGRATION_THRESHOLD_FOR_HIGH_CPU;
         this.MIGRATION_THRESHOLD_FOR_LOW_MEMORY = MIGRATION_THRESHOLD_FOR_LOW_MEMORY;
         this.MIGRATION_THRESHOLD_FOR_HIGH_MEMORY = MIGRATION_THRESHOLD_FOR_HIGH_MEMORY;
-        this.HEURISTIC= HEURISTIC;
+        this.HEURISTIC = HEURISTIC;
         this.VMWARE_MAX_MIGRATIONS = VMWARE_MAX_MIGRATIONS;
     }
 

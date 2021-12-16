@@ -26,7 +26,7 @@ public class Graph2Host {
     private Hashtable neighborsCoalition; //String idHostneighbor, int coalition of its hostNeighbor
     private Hashtable neighborsDistance; // String idHostneighbor, int distance to its neighbor
     private ArrayList<HostAndNeighbors> theHosts;
-    private ArrayList<HostDescription> leaders;
+    private ArrayList<String> leaders;
     private HashSet<weightEdge> listEdges;
 
     private static ExperimentRunConfiguration configuration;
@@ -40,7 +40,7 @@ public class Graph2Host {
         theHosts = new ArrayList<HostAndNeighbors>();
         membersOfCoalition = new ArrayList<String>();
         this.SetCoalitions = new ArrayList<HashSet<String>>();
-        this.leaders = new ArrayList<HostDescription>();
+        this.leaders = new ArrayList<String>();
         this.listEdges = new HashSet<weightEdge>();
     }
 
@@ -68,11 +68,11 @@ public class Graph2Host {
         return retPos;
     }
 
-    public ArrayList<HostDescription> getLeaders() {
+    public ArrayList<String> getLeaders() {
         return this.leaders;
     }
 
-    public void addLeader(HostDescription xHost) {
+    public void addLeader(String xHost) {
         this.leaders.add(xHost);
     }
 
@@ -195,7 +195,7 @@ public class Graph2Host {
                     "aContainerName",
                     String.valueOf(xLeader));
             if (isLeader) {
-                this.addLeader(H);
+                this.addLeader(H.getId());
             }
             isLeader = false;
             hosts.add(H);

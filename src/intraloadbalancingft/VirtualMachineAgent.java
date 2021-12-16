@@ -5,7 +5,6 @@
 package intraloadbalancingft;
 
 
-
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.ContainerID;
@@ -132,7 +131,7 @@ public class VirtualMachineAgent extends Agent {
                 }
             } catch (Exception e) {
                 if (Consts.EXCEPTIONS)
-                    System.out.println("Hey 11"+e);
+                    System.out.println("Hey 11" + e);
             }
         }
 
@@ -160,7 +159,7 @@ public class VirtualMachineAgent extends Agent {
                     System.out.println(agt.getAID().getLocalName() + " sent message to " + virtualMachineDescription.getOwnerId() + " for registration");
             } catch (Exception e) {
                 if (Consts.EXCEPTIONS)
-                    System.out.println("hey 13" +e);
+                    System.out.println("hey 13" + e);
             }
 
         }
@@ -201,7 +200,7 @@ public class VirtualMachineAgent extends Agent {
                 }
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS)
-                    System.out.println("Hey 14"+ex);
+                    System.out.println("Hey 14" + ex);
             }
         }
     }

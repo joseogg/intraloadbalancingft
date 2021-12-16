@@ -33,8 +33,13 @@ public class HostAgent extends Agent {
     private double[] lastCPUUsages;
     private double[] lastMemoryUsages;
 
-    private ArrayList<String> coalitionMembers;
-    private ArrayList<HostDescription> coalitionLeaders;
+    private ArrayList<String> coalitionLeaders;
+    private Map<String, ArrayList<String>> coalitionToHostAgents; // coalition id, members
+
+    private Map<String, ArrayList<FailureRecord>> hostsFailures; // host agent id, lists of Failures
+    private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
+    private Map<String, String> hostAgentToCoalition; // member id to coalition
+
     private int thresholdViolationCounterForHighCPU;  // This is counting how many times thresholds of high cpu have been violated, the in/decreasing rate depends on the SMA's report frequency
     private int thresholdViolationCounterForHighMemory;  // This is counting how many times thresholds of high memory have been violated, the in/decreasing rate depends on the SMA's report frequency
     private int thresholdViolationCounterForLowCPU;  // This is counting how many times thresholds of low cpu have been violated, the in/decreasing rate depends on the SMA's report frequency
@@ -45,6 +50,8 @@ public class HostAgent extends Agent {
     private boolean lowCPUThresholdViolated;
     private boolean lowMemoryThresholdViolated;
 
+    private Object logisticRegressionModel;
+
     private HashSet<weightEdge> edges;
     private Utilities utils;
     transient protected HostAgentGUI hostAgentGUI; // Reference to the gui
@@ -53,7 +60,17 @@ public class HostAgent extends Agent {
 
     private static ExperimentRunConfiguration configuration;
 
+
     public HostAgent() {
+        logisticRegressionModel = new Object();
+        coalitionToHostAgents = new HashMap<String, ArrayList<String>>();
+
+
+        coalitionFailures = new HashMap<String, Map<String, ArrayList<FailureRecord>>>();
+        hostsFailures = new HashMap<String, ArrayList<FailureRecord>>();
+
+
+        hostAgentToCoalition = new HashMap<String, String>();
         failed = false;
         failureTicksDuration = 0;
         failureProbability = 0.0; // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
@@ -63,8 +80,7 @@ public class HostAgent extends Agent {
         hostDescription.setInProgress(false);
         hostDescription.setFailed(false);
         utils = new Utilities();
-        coalitionMembers = new ArrayList<String>();
-        coalitionLeaders = new ArrayList<HostDescription>();
+        coalitionLeaders = new ArrayList<String>();
         edges = new HashSet<weightEdge>();
         resetAverageUsages();
         resetCounters();
@@ -79,21 +95,25 @@ public class HostAgent extends Agent {
 
             Object[] args = getArguments();
             hostDescription = (HostDescription) args[0];
-
             hostDescription.setContainerName(getContainerController().getContainerName());
-            //System.out.println("Mem "+ hostDescription.getAvailableMemory());
-            coalitionMembers = (ArrayList<String>) args[1];
-            coalitionLeaders = (ArrayList<HostDescription>) args[2];
+            coalitionLeaders = (ArrayList<String>) args[1];
+            edges = (HashSet) (args[2]);
+            configuration = (ExperimentRunConfiguration) args[3];
+            failureProbability = (double) args[4];
+            coalitionToHostAgents = getCoalitions((ArrayList<HashSet<String>>) args[5]);
 
-            edges = (HashSet) (args[4]);
+            // Creating a new dictionary including the relationship between hostAgents and coalitions.
+            for (String coalitionId : coalitionToHostAgents.keySet()) {
+                for (String hostAgent : coalitionToHostAgents.get(coalitionId)) {
+                    hostAgentToCoalition.put(hostAgent, coalitionId);
+                }
+            }
 
-            configuration = (ExperimentRunConfiguration) args[6];
-            failureProbability = (double)args[7];
+            hostDescription.setMyLeader("HostAgent" + hostDescription.getCoalition());
 
             if (!Consts.LOG) {
                 System.out.println(this.getLocalName() + "'s container is " + this.getContainerController().getContainerName());
             }
-
             hostAgentGUI = new HostAgentGUI(hostDescription);
             hostAgentGUI.setTitle(getLocalName());
             hostAgentGUI.updateResourceConsumption();
@@ -101,17 +121,15 @@ public class HostAgent extends Agent {
                 hostAgentGUI.setVisible(true);
             }
 
-            if (configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) {
+            if (configuration.getLOAD_BALANCING_TYPE() == Consts.DISTRIBUTED_FIXED_COALITIONS) {
                 addBehaviour(new CNPParticipantForIntraLoadBalancingAtoB(this)); // the agent always listens for potential requests for Intra Load Balancing from A (this source host) to B (a destination host).
                 addBehaviour(new CNPParticipantForIntraLoadBalancingBtoA(this)); // the agent always listens for potential requests for Intra Load Balancing from B (an external host) to A (this destination host).
-
                 if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME()) {
                     if (hostDescription.isLeader())
                         addBehaviour(new LeaderListenerForCounterReset(this));
                     else
                         addBehaviour(new MemberListenerForCounterReset(this));
                 }
-
             } else if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                 addBehaviour(new VMWARE_RemoveAndMigrateVM(this));
                 addBehaviour(new VMWARE_LockVM(this));
@@ -122,7 +140,6 @@ public class HostAgent extends Agent {
             }
 
             // Behaviours required for any balancing type.
-
             addBehaviour(new ListenerForVMMigrations(this));
             addBehaviour(new RequestsReceiver(this));
             addBehaviour(new PerformanceReporterAndThresholdMonitoring(this, Consts.HOST_REPORTING_RATE + new Random().nextInt((int) Consts.RANGE_OF_RANDOM_TICKS))); // Added a random number to prevent colitions among host agents when enacting interactions protocols.
@@ -130,14 +147,56 @@ public class HostAgent extends Agent {
             addBehaviour(new MonitorListener(this));
 
             // Behaviours required for fault-tolerance.
-            addBehaviour(new SwitchFailureHandler(this));
-            addBehaviour(new UpdateStatusFailure(this, 1000));
+            if (Consts.FAILURES_ARE_ENABLED) {
+                addBehaviour(new SwitchFailureHandler(this));
+
+                addBehaviour(new ModelReceiver(this));
+
+                addBehaviour(new UpdateStatusFailure(this, 1000));
+
+                if (hostDescription.isLeader()){
+                    addBehaviour(new FailureLeaderListener(this));
+                    addBehaviour(new NotifyFailuresToOtherLeaders(this, 1000));
+                    addBehaviour(new FailureSummariesListener(this));
+                }
+
+
+            }
 
         } catch (Exception ex) {
             if (Consts.EXCEPTIONS) {
                 System.out.println("It is here 8 " + ex);
             }
         }
+    }
+
+
+
+    private String selectCoalitionForLoadbalancing() {
+        // for testing purposes, right now it selects a coalition at random
+        return coalitionLeaders.get((new Random()).nextInt(coalitionLeaders.size()));
+    }
+
+    private Map<String, ArrayList<String>> getCoalitions(ArrayList<HashSet<String>> setCoalitions) {
+        Map<String, ArrayList<String>> tmpCoalitionToHosts = new HashMap<String, ArrayList<String>>();
+        ArrayList<String> coalition = new ArrayList<String>();
+        for (int coalitionNumber = 0; coalitionNumber < setCoalitions.size(); coalitionNumber++) {
+            HashSet<String> set = setCoalitions.get(coalitionNumber);
+            Iterator<String> iterator = set.iterator();
+            ArrayList<String> hostAgents = new ArrayList<String>();
+            ArrayList<Integer> hostAgentIDs = new ArrayList<Integer>();
+            int minIdentifier = Integer.MAX_VALUE;
+            while (iterator.hasNext()) {
+                String anAgentID = (String) iterator.next();
+                hostAgentIDs.add(Integer.valueOf(anAgentID));
+                hostAgents.add("HostAgent" + anAgentID);
+                if (Integer.valueOf(anAgentID) < minIdentifier) {
+                    minIdentifier = Integer.valueOf(anAgentID);
+                }
+            }
+            tmpCoalitionToHosts.put("HostAgent" + String.valueOf(minIdentifier), hostAgents);
+        }
+        return tmpCoalitionToHosts;
     }
 
 
@@ -157,34 +216,133 @@ public class HostAgent extends Agent {
         return -1;
     }
 
-    private class UpdateStatusFailure extends TickerBehaviour {
+
+    private class NotifyFailuresToOtherLeaders extends TickerBehaviour {
 
         private ACLMessage msg;
 
-        public UpdateStatusFailure(Agent a, long period) {
+        public NotifyFailuresToOtherLeaders(Agent a, long period) {
             super(a, period);
+        }
+
+        @Override
+        public void onTick() {
+            try {
+                msg = new ACLMessage(ACLMessage.INFORM);
+                for (int i = 0; i < coalitionLeaders.size(); i++) { // notify all the leaders (except myself) about the failures
+                    if (!coalitionLeaders.get(i).equals("HostAgent" + hostDescription.getCoalition())) {
+                        msg.addReceiver(new AID(coalitionLeaders.get(i), AID.ISLOCALNAME));
+                    }
+                }
+                msg.setConversationId(Consts.CONVERSATION_FAILURE_SUMMARY_FROM_LEADERS);
+                msg.setContentObject((java.io.Serializable) hostsFailures);
+                send(msg);
+            } catch (Exception e) {
+                if (Consts.EXCEPTIONS)
+                    System.out.println("Hey 11343" + e);
+            }
+        }
+    }
+
+
+    private class FailureSummariesListener extends CyclicBehaviour {
+
+        private Agent agt;
+        private MessageTemplate mt;
+        private ACLMessage msg;
+
+        public FailureSummariesListener(Agent agt) {
+            this.agt = agt;
+            this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_FAILURE_SUMMARY_FROM_LEADERS);
+        }
+
+        @Override
+        public void action() {
+            msg = receive(mt);
+            if (msg == null) {
+                block();
+                return;
+            }
+            try {
+                HashMap<String, ArrayList<FailureRecord>> aFailureSummary = (HashMap<String, ArrayList<FailureRecord>>)msg.getContentObject();
+                System.out.println("Receiving a Failure summary from other agent " + String.valueOf(aFailureSummary));
+                //private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
+                coalitionFailures.put(msg.getSender().getLocalName(), aFailureSummary);
+
+                System.out.println("aaa " + coalitionFailures.get(msg.getSender().getLocalName()));
+
+            } catch (Exception ex) {
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("Hey 1123484" + ex);
+                }
+            }
+        }
+    }
+
+    private class UpdateStatusFailure extends TickerBehaviour {
+
+        private ACLMessage msg;
+        private Agent agt;
+        private long failureStartTime;
+        private long failureEndTime;
+
+        public UpdateStatusFailure(Agent agt, long period) {
+            super(agt, period);
+            this.agt = agt;
         }
 
         @Override
         public synchronized void onTick() {
 
-                if (failureTicksDuration > 0) {
-                    failureTicksDuration--;
-                    if (failureTicksDuration == 0) {
+            if (failureTicksDuration > 0) {
+                failureTicksDuration--;
+                if (failureTicksDuration == 0) {
+                    try {
                         //System.out.println(hostDescription.getId()+ " is up again");
+                        failureEndTime = System.currentTimeMillis();; // meaning it has not been defined yet
                         failed = false;
                         hostDescription.setFailed(false);
+                        // Notify coalition leader that the server is up again
+                        ACLMessage notifyBusinessAsUsualToLeader = new ACLMessage(ACLMessage.INFORM);
+                        AID to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
+                        notifyBusinessAsUsualToLeader.setSender(agt.getAID());
+                        notifyBusinessAsUsualToLeader.addReceiver(new AID(hostDescription.getMyLeader(), AID.ISLOCALNAME));
+                        notifyBusinessAsUsualToLeader.setConversationId(Consts.CONVERSATION_FAILURE_NOTIFICATION);
+                        notifyBusinessAsUsualToLeader.setContentObject(new FailureRecord(failureStartTime, failureEndTime));
+                        System.out.println(hostDescription.getId()+"- notified its leader that is up again and failure's times");
+                        agt.send(notifyBusinessAsUsualToLeader);
+                    } catch (IOException ex) {
+                        if (Consts.EXCEPTIONS) {
+                            System.out.println("Hey Failure 1" + ex);
+                        }
                     }
+
+
                 }
-                if ((!failed) && (Math.random() < failureProbability) && !hostDescription.isInProgress()) {
-                    resetAverageUsages();
-                    resetCounters();
-                    resetThresholdFlags();
-                    failed = true;
-                    hostDescription.setFailed(true);
-                    failureTicksDuration = Math.round(Math.random() * 60); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
-                    //System.out.println(hostDescription.getId()+ " failed for " + failureTicksDuration);
-                }
+            }
+            if ((!failed) && (Math.random() < failureProbability) && !hostDescription.isInProgress()) {
+                resetAverageUsages();
+                resetCounters();
+                resetThresholdFlags();
+                failed = true;
+                hostDescription.setFailed(true);
+                failureTicksDuration = Math.round(Math.random() * 60); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
+                System.out.println(hostDescription.getId() + " failed for " + failureTicksDuration);
+
+                failureStartTime = System.currentTimeMillis();
+                failureEndTime = -1; // meaning it has not been defined yet
+
+
+                // Notify coalition leader that a failure has occurred.
+                // ACLMessage notifyFailureToLeader = new ACLMessage(ACLMessage.INFORM);
+                // AID to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
+                // notifyFailureToLeader.setSender(agt.getAID());
+                // notifyFailureToLeader.addReceiver(new AID(hostDescription.getMyLeader(), AID.ISLOCALNAME));
+                // notifyFailureToLeader.setConversationId(Consts.CONVERSATION_FAILURE_NOTIFICATION);
+                // notifyFailureToLeader.setContent("DOWN");
+                // System.out.println(hostDescription.getId()+"- notified its leader that a failure has occurred");
+                // agt.send(notifyFailureToLeader);
+            }
 
         }
     }
@@ -218,7 +376,9 @@ public class HostAgent extends Agent {
                 finalMsg = new ACLMessage(ACLMessage.REQUEST);
                 to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
                 finalMsg.setSender(agt.getAID());
-                for (int i = 0; i < coalitionMembers.size(); i++) { // notify all the leaders (except my own leader) that a coalition has been balanced
+
+                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(hostDescription.getMyLeader());
+                for (int i = 0; i < coalitionMembers.size(); i++) { // notify all the coalition members (except me) that a coalition has been balanced
                     if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
                         finalMsg.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
                     }
@@ -282,8 +442,8 @@ public class HostAgent extends Agent {
                 AID to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
                 msg.setSender(agt.getAID());
                 for (int i = 0; i < coalitionLeaders.size(); i++) { // notify all the leaders (except my own leader) that a coalition has been balanced
-                    if (!coalitionLeaders.get(i).getId().equals("HostAgent" + hostDescription.getCoalition())) {
-                        msg.addReceiver(new AID(coalitionLeaders.get(i).getId(), AID.ISLOCALNAME));
+                    if (!coalitionLeaders.get(i).equals("HostAgent" + hostDescription.getCoalition())) {
+                        msg.addReceiver(new AID(coalitionLeaders.get(i), AID.ISLOCALNAME));
                     }
                 }
                 msg.setConversationId(Consts.CONVERSATION_A_COALITION_WAS_JUST_BALANCED);
@@ -322,7 +482,7 @@ public class HostAgent extends Agent {
             }
             try {
                 vm = (VirtualMachineDescription) (msg.getContentObject());
-                operationOverVM(vm, "removeAndMigrate", "AtoB");
+                operationOverVM(vm, "removeAndMigrate", "AtoB", null, null);
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("It is here 9" + ex);
@@ -348,53 +508,53 @@ public class HostAgent extends Agent {
         @Override
         public void action() {
 
-                msg = receive(mt);
-                if (msg == null) {
-                    hostDescription.setInProgress(false);
-                    block();
-                    return;
-                }
-                try {
-                    if (!hostDescription.isInProgress()) {
+            msg = receive(mt);
+            if (msg == null) {
+                hostDescription.setInProgress(false);
+                block();
+                return;
+            }
+            try {
+                if (!hostDescription.isInProgress()) {
 
-                        hostDescription.setInProgress(true);
-                        vm = (VirtualMachineDescription) (msg.getContentObject());
-                        if ((vm.getMemory() <= hostDescription.getAvailableMemory()) && (vm.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores())) { // if the host has sufficient resources to allocate the VM
-                            acknowledgementMsg = new ACLMessage(ACLMessage.CONFIRM);
-                            acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
-                            acknowledgementMsg.addReceiver(msg.getSender());
-                            acknowledgementMsg.setContent("Success in locking resources for VM migration");
-                            agt.send(acknowledgementMsg);
-                            if (!Consts.LOG) {
-                                System.out.println("Success in locking resources for VM migration");
-                            }
-                            //System.out.println("HERE He is 4");
-                        } else {
-                            hostDescription.setInProgress(false);
-                            acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
-                            acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
-                            acknowledgementMsg.addReceiver(msg.getSender());
-                            acknowledgementMsg.setContent("Failed to lock resources for VM migration due to insufficient resources");
-                            agt.send(acknowledgementMsg);
-                            if (!Consts.LOG) {
-                                System.out.println("Failed to lock resources for VM migration due to insufficient resources");
-                            }
-                            //System.out.println("HERE He is 5");
+                    hostDescription.setInProgress(true);
+                    vm = (VirtualMachineDescription) (msg.getContentObject());
+                    if ((vm.getMemory() <= hostDescription.getAvailableMemory()) && (vm.getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores())) { // if the host has sufficient resources to allocate the VM
+                        acknowledgementMsg = new ACLMessage(ACLMessage.CONFIRM);
+                        acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
+                        acknowledgementMsg.addReceiver(msg.getSender());
+                        acknowledgementMsg.setContent("Success in locking resources for VM migration");
+                        agt.send(acknowledgementMsg);
+                        if (!Consts.LOG) {
+                            System.out.println("Success in locking resources for VM migration");
                         }
-                    } else { //if it is busy
+                        //System.out.println("HERE He is 4");
+                    } else {
+                        hostDescription.setInProgress(false);
                         acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
                         acknowledgementMsg.addReceiver(msg.getSender());
-                        acknowledgementMsg.setContent("Failed to lock resources for VM migration because I'm busy");
+                        acknowledgementMsg.setContent("Failed to lock resources for VM migration due to insufficient resources");
                         agt.send(acknowledgementMsg);
+                        if (!Consts.LOG) {
+                            System.out.println("Failed to lock resources for VM migration due to insufficient resources");
+                        }
+                        //System.out.println("HERE He is 5");
                     }
-                } catch (Exception ex) {
-                    hostDescription.setInProgress(false);
-                    if (Consts.EXCEPTIONS) {
-                        System.out.println("It is here 10" + ex);
-                    }
-
+                } else { //if it is busy
+                    acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
+                    acknowledgementMsg.setConversationId(Consts.VMWARE_CONVERSATION_LOCK_RESOURCES);
+                    acknowledgementMsg.addReceiver(msg.getSender());
+                    acknowledgementMsg.setContent("Failed to lock resources for VM migration because I'm busy");
+                    agt.send(acknowledgementMsg);
                 }
+            } catch (Exception ex) {
+                hostDescription.setInProgress(false);
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("It is here 10" + ex);
+                }
+
+            }
 
         }
     }
@@ -491,7 +651,6 @@ public class HostAgent extends Agent {
     }
 
 
-
     private void resetAverageUsages() {
         currentTick = -1;
         for (int i = 0; i < lastCPUUsages.length; i++) {
@@ -537,15 +696,18 @@ public class HostAgent extends Agent {
                 try {
 
                     vm = (VirtualMachineDescription) (msg.getContentObject());
-                    if (operationOverVM(vm, "migration", null) && !failed) { // if it can host the VM
+                    if (operationOverVM(vm, "migration", null, null, null) && !failed) { // if it can host the VM
                         if (Consts.LOG) {
                             //System.out.println(hostDescription.getId() + " successful migration of VM: " + vm);
-                            System.out.println("{\"coalition\":" + hostDescription.getCoalition()
+
+                            int sourceCoalition = Integer.valueOf(hostAgentToCoalition.get(vm.getPreviousOwnerId()).replace("HostAgent", ""));
+                            int destinationCoalition = Integer.valueOf(hostAgentToCoalition.get(vm.getOwnerId()).replace("HostAgent", ""));
+                            System.out.println("{\"source_coalition\":" + String.valueOf(sourceCoalition)
+                                    + ", \"destination_coalition\":" + String.valueOf(destinationCoalition)
                                     + ", \"migrationType\":\"" + vm.getMigrationType() + "\""
                                     + ", \"origin\":\"" + vm.getPreviousOwnerId() + "\""
                                     + ", \"destination\":\"" + vm.getOwnerId() + "\""
-                                    + //                                                                    ", \"who prints\":\""+ hostDescription.getId()+"\"" +
-                                    ", \"vmid\":\"" + vm.getId() + "\""
+                                    + ", \"vmid\":\"" + vm.getId() + "\""
                                     + ", \"distance\":" + getDistance(vm.getPreviousOwnerId(), vm.getOwnerId())
                                     + ", \"time\":" + System.currentTimeMillis()
                                     + "}");
@@ -599,7 +761,7 @@ public class HostAgent extends Agent {
                 try {
                     hostDescription.setInProgress(true);
                     vm = (VirtualMachineDescription) (msg.getContentObject());
-                    if (operationOverVM(vm, "initialAllocation", null) && !failed) { // if it can host the VM
+                    if (operationOverVM(vm, "initialAllocation", null, null, null) && !failed) { // if it can host the VM
                         acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
@@ -648,6 +810,74 @@ public class HostAgent extends Agent {
         }
     }
 
+    private class ModelReceiver extends CyclicBehaviour {
+
+        private Agent agt;
+        private MessageTemplate mt;
+
+        public ModelReceiver(Agent agt) {
+            this.agt = agt;
+            this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_MODEL_UPDATE);
+        }
+
+        @Override
+        public void action() {
+            ACLMessage msg = receive(mt);
+            if (msg == null) {
+                block();
+                return;
+            }
+            try {
+                logisticRegressionModel = (Object) (msg.getContentObject());
+            } catch (Exception ex) {
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("It is here 116" + ex);
+                }
+            }
+        }
+    }
+
+    private class FailureLeaderListener extends CyclicBehaviour {
+
+        private Agent agt;
+        private MessageTemplate mt;
+
+        public FailureLeaderListener(Agent agt) {
+            this.agt = agt;
+            this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_FAILURE_NOTIFICATION);
+        }
+
+        @Override
+        public void action() {
+                ACLMessage msg = receive(mt);
+                if (msg == null) {
+                    block();
+                    return;
+                }
+                try {
+
+                    FailureRecord failureRecord = (FailureRecord) msg.getContentObject();
+//                    System.out.println(msg.getSender().getLocalName());
+//                    System.out.println(failureRecord);
+                    ArrayList<FailureRecord> failures = hostsFailures.get(msg.getSender().getLocalName());
+//                    System.out.println(failures);
+                    if (failures == null)
+                        failures = new ArrayList<FailureRecord>();
+//                    System.out.println(failures);
+
+                    failures.add(failureRecord);
+                    hostsFailures.put(msg.getSender().getLocalName(), failures);
+
+                    System.out.println("\n\n\n\n"+hostsFailures+"\n\n\n\n\n");
+
+                } catch (Exception ex) {
+                    if (Consts.EXCEPTIONS) {
+                        System.out.println("It is here 888" + ex);
+                    }
+                }
+        }
+    }
+
 
     private class SwitchFailureHandler extends CyclicBehaviour {
 
@@ -664,27 +894,30 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
-                msg = receive(mt);
-                if (msg == null) {
-                    block();
-                    return;
+
+            // TWO TYPES OF FAILURES HOST AND SWITCH
+            msg = receive(mt);
+            if (msg == null) {
+                block();
+                return;
+            }
+            try {
+                System.out.println(msg.getContent());
+                if (msg.getContent().equals("FAILED")) {
+                    failed = true;
+                    hostDescription.setFailed(true);
+                } else { // if switch working again
+                    failed = false;
+                    hostDescription.setFailed(false);
                 }
-                try {
-                    System.out.println(msg.getContent());
-                    if (msg.getContent().equals("FAILED")) {
-                        failed = true;
-                        hostDescription.setFailed(true);
-                    } else { // if switch working again
-                        failed = false;
-                        hostDescription.setFailed(false);
-                    }
-                } catch (Exception ex) {
-                    if (Consts.EXCEPTIONS) {
-                        System.out.println("It is here Failure 1" + ex);
-                    }
+            } catch (Exception ex) {
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("It is here Failure 1" + ex);
                 }
+            }
         }
     }
+
 
     private class VMWARE_RemoveAndMigrateVM extends CyclicBehaviour {
 
@@ -712,7 +945,7 @@ public class HostAgent extends Agent {
                 try {
                     hostDescription.setInProgress(true);
                     vm = (VirtualMachineDescription) (msg.getContentObject());
-                    if (operationOverVM(vm, "initialAllocation", null)) { // if it can host the VM
+                    if (operationOverVM(vm, "initialAllocation", null, null, null)) { // if it can host the VM
                         acknowledgementMsg = new ACLMessage(ACLMessage.INFORM);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
                         acknowledgementMsg.addReceiver(msg.getSender());
@@ -724,6 +957,7 @@ public class HostAgent extends Agent {
                         //Create VM agent;
                         vmAgentParams = new Object[2];
                         vm.setOwnerId(hostDescription.getId());
+
                         vmAgentParams[0] = vm;
                         getContainerController().createNewAgent(vm.getVirtualMachineId(), "intraloadbalancingft.VirtualMachineAgent", vmAgentParams);
                         getContainerController().getAgent(String.valueOf(vm.getVirtualMachineId())).start();
@@ -754,6 +988,7 @@ public class HostAgent extends Agent {
         private MessageTemplate mt;
         private ACLMessage msg;
         private VirtualMachineDescription vm;
+
         public MonitorListener(Agent agt) {
             this.agt = agt;
             this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_MONITOR_VM);
@@ -782,7 +1017,7 @@ public class HostAgent extends Agent {
 
     private void updateVirtualMachineResourceConsumption(VirtualMachineDescription vmDescriptionToBeUpdated) {
         try {
-            for (int i=0; i<hostDescription.getVirtualMachinesHosted().size(); i++) {
+            for (int i = 0; i < hostDescription.getVirtualMachinesHosted().size(); i++) {
                 if (hostDescription.getVirtualMachinesHosted().get(i).getId().equals(vmDescriptionToBeUpdated.getId())) {
                     hostDescription.getVirtualMachinesHosted().get(i).setCPUUsage(vmDescriptionToBeUpdated.getCPUUsage());
                     hostDescription.getVirtualMachinesHosted().get(i).setMemoryUsage(vmDescriptionToBeUpdated.getMemoryUsage());
@@ -829,7 +1064,6 @@ public class HostAgent extends Agent {
         }
 
 
-
         hostAgentGUI.updateResourceConsumption();
     }
 
@@ -868,7 +1102,7 @@ public class HostAgent extends Agent {
                 resetThresholdFlags();
                 terminated = true;
                 if (hostDescription.getVirtualMachinesHosted().size() > 0) {
-                    operationOverVM(null, "randomDeparture", null);
+                    operationOverVM(null, "randomDeparture", null, null, null);
                 }
                 hostDescription.setInProgress(false);
             }
@@ -898,7 +1132,7 @@ public class HostAgent extends Agent {
 
     }
 
-    private boolean operationOverVM(VirtualMachineDescription vm, String operation, String type) { // This methods is only executed when inProgress is set to False. This prevents datarace conditions due to behaviours' concurrent access to VMs
+    private boolean operationOverVM(VirtualMachineDescription vm, String operation, String type, String source, String destination) { // This methods is only executed when inProgress is set to False. This prevents datarace conditions due to behaviours' concurrent access to VMs
         switch (operation) {
 
             case "initialAllocation":
@@ -1020,6 +1254,7 @@ public class HostAgent extends Agent {
 
     }
 
+
     private class PerformanceReporterAndThresholdMonitoring extends TickerBehaviour {
 
         private Agent agt;
@@ -1043,7 +1278,7 @@ public class HostAgent extends Agent {
                 msg.setConversationId(Consts.CONVERSATION_MONITOR_HOST);
                 msg.setContentObject((java.io.Serializable) hostDescription);
                 send(msg);
-                if ((configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) && (!failed))  {
+                if ((configuration.getLOAD_BALANCING_TYPE() == Consts.DISTRIBUTED_FIXED_COALITIONS) && (!failed)) {
 
                     if (Consts.MIGRATION_TRIGGER_TYPE == Consts.MIGRATION_TRIGGER_BASED_ON_COUNTERS) {
 
@@ -1070,35 +1305,98 @@ public class HostAgent extends Agent {
                         } else if (thresholdViolationCounterForLowMemory > 0) {
                             thresholdViolationCounterForLowMemory--;
                         }
-
                         // verifying whether any counter cause a vm migration from this host agent or other host agent from the same coalition
                         if ((thresholdViolationCounterForHighCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_CPU) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             highCPUThresholdViolated = true;
-                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU));
+                            /*
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * */
+                            String coalitionIdForLoadBalancing = "";
+                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                            } else {
+                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                            }
+                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, coalitionIdForLoadBalancing));
+
                         } else if ((thresholdViolationCounterForHighMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             highMemoryThresholdViolated = true;
-                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY));
+                            /*
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * */
+                            String coalitionIdForLoadBalancing = "";
+                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                            } else {
+                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                            }
+                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, coalitionIdForLoadBalancing));
+
                         } else if ((thresholdViolationCounterForLowCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_CPU) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             lowCPUThresholdViolated = true;
-                            //System.out.println("Yes I did it!");
-                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU));
+                            /*
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * */
+                            String coalitionIdForLoadBalancing = "";
+                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                            } else {
+                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                            }
+                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU, coalitionIdForLoadBalancing));
+
                         } else if ((thresholdViolationCounterForLowMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
                             resetAverageUsages();
                             lowMemoryThresholdViolated = true;
-                            //System.out.println("Yes I did it!");
-
-                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY));
+                            /*
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                             * */
+                            String coalitionIdForLoadBalancing = "";
+                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                            } else {
+                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                            }
+                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY, coalitionIdForLoadBalancing));
                         }
 
                     } else if (Consts.MIGRATION_TRIGGER_TYPE == Consts.MIGRATION_TRIGGER_BASED_ON_AVERAGE_USAGE) {
@@ -1120,37 +1418,105 @@ public class HostAgent extends Agent {
 
                             double averageCPUUsage = totalCPUUsage / (double) lastCPUUsages.length; // average CPU usage within a time window
                             double averageMemoryUsage = totalMemoryUsage / (double) lastMemoryUsages.length; // average Memory usage within a time window
-                            //System.out.println("*********** "+ averageCPUUsage+ " "+ hostDescription.getHighMigrationThresholdForCPU());                            
                             if ((averageCPUUsage > hostDescription.getHighMigrationThresholdForCPU()) && (hostDescription.getVirtualMachinesHosted().size() > 0) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
-                                resetCounters();// unique
+                                resetCounters();
                                 resetAverageUsages();
                                 highCPUThresholdViolated = true;
-                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU));
-                            } else if ((averageMemoryUsage > hostDescription.getHighMigrationThresholdForMemory())  && Consts.BALANCE_MEMORY  && (hostDescription.getVirtualMachinesHosted().size() > 0) && (!hostDescription.isInProgress())) {
+
+                                /*
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * */
+                                String coalitionIdForLoadBalancing = "";
+                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                                } else {
+                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                                }
+                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, coalitionIdForLoadBalancing));
+
+
+                            } else if ((averageMemoryUsage > hostDescription.getHighMigrationThresholdForMemory()) && Consts.BALANCE_MEMORY && (hostDescription.getVirtualMachinesHosted().size() > 0) && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
-                                resetCounters();// unique
+                                resetCounters();
                                 resetAverageUsages();
                                 highMemoryThresholdViolated = true;
-                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY));
-                            } else if ((averageCPUUsage < hostDescription.getLowMigrationThresholdForCPU())  && Consts.BALANCE_CPU &&  (!hostDescription.isInProgress())) {
+                                /*
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * */
+
+                                String coalitionIdForLoadBalancing = "";
+                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                                } else {
+                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                                }
+                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, coalitionIdForLoadBalancing));
+
+                            } else if ((averageCPUUsage < hostDescription.getLowMigrationThresholdForCPU()) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
-                                resetCounters();// unique
+                                resetCounters();
                                 resetAverageUsages();
                                 lowCPUThresholdViolated = true;
-                                //System.out.println("Yes I did it!");
-                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU));
+                                /*
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * */
+                                String coalitionIdForLoadBalancing = "";
+                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                                } else {
+                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                                }
+                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU, coalitionIdForLoadBalancing));
+
                             } else if ((averageMemoryUsage < hostDescription.getLowMigrationThresholdForMemory()) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                                 currentTick = -1;
-                                resetCounters();// unique
+                                resetCounters();
                                 resetAverageUsages();
                                 lowMemoryThresholdViolated = true;
-                                //System.out.println("Yes I did it!");
-                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY));
+                                /*
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * Verify whether the agent will migrate the VM within its coalition or other external coalition.
+                                 * */
+                                String coalitionIdForLoadBalancing = "";
+                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
+                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
+                                } else {
+                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                                }
+                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY, coalitionIdForLoadBalancing));
+
                             }
 
                             if (currentTick == (Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE - 1)) {
@@ -1158,15 +1524,7 @@ public class HostAgent extends Agent {
                             }
                         }
                     }
-
-
-                } //else if ((configuration.getLOAD_BALANCING_TYPE() == Consts.INTRA_DISTRIBUTED_FIXED_COALITIONS) && (failed))  {
-                   // resetAverageUsages();
-                    //resetCounters();
-                    //resetThresholdFlags();
-                    //hostDescription.setInProgress(false);
-                //}
-
+                }
             } catch (Exception ex) {
                 hostDescription.setInProgress(false);
                 if (Consts.EXCEPTIONS) {
@@ -1192,7 +1550,7 @@ public class HostAgent extends Agent {
             sum = hostDescription.getMemoryUsage();
         }
         HostDescription participantHost;
-        for (int i=0; i<responses.size(); i++) {
+        for (int i = 0; i < responses.size(); i++) {
             try {
                 participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (resource.toLowerCase().equals("cpu")) {
@@ -1221,7 +1579,7 @@ public class HostAgent extends Agent {
             summatory = Math.pow(hostDescription.getMemoryUsage() - mean, 2);
         }
         HostDescription participantHost;
-        for (int i=0; i<responses.size(); i++){
+        for (int i = 0; i < responses.size(); i++) {
             try {
                 participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
                 if (resource.toLowerCase().equals("cpu")) {
@@ -1265,22 +1623,11 @@ public class HostAgent extends Agent {
 
 
     private Decision selectHostAgentBasedOnCoalitionUtility(Vector responses, int loadBalancingCause) {
-        Heuristics heuristics = new Heuristics(hostDescription, loadBalancingCause, responses, getArguments());
-        HostDescription selectedHost = null;
-        VirtualMachineDescription selectedVM = null;
+        Heuristics heuristics = new Heuristics(hostDescription, loadBalancingCause, responses, edges, configuration.getHEURISTIC());
+        HostDescription selectedHost = heuristics.getSelectedHost();
+        VirtualMachineDescription selectedVM = heuristics.getSelectedVM();
 
         try {
-            // the heuristics
-            if (configuration.getHEURISTIC().equals("EXHAUSTIVE"))
-                heuristics.heuristic_exhaustive();
-            else if (configuration.getHEURISTIC().equals("MAXMIN"))
-                heuristics.heuristic_maxMinHostUsage();
-            else if (configuration.getHEURISTIC().equals("ROULETTE"))
-                heuristics.heuristic_roulette_wheel();
-
-            selectedHost = heuristics.getSelectedHost();
-            selectedVM = heuristics.getSelectedVM();
-
             // perform the migration
             switch (loadBalancingCause) {
                 case Consts.MIGRATION_CAUSE_HIGH_CPU:
@@ -1336,7 +1683,6 @@ public class HostAgent extends Agent {
     }
 
 
-
     private class CNPInitiatorForIntraLoadBalancingAtoB extends OneShotBehaviour { // Initiator of Contract Net Protocol for VM Migration
 
         private Agent agt;
@@ -1344,28 +1690,32 @@ public class HostAgent extends Agent {
         private int loadBalancingCause;
         private int numberOfPotentialRespondents;
         private ACLMessage callForProposalsForLoadBalancing;
-        public CNPInitiatorForIntraLoadBalancingAtoB(Agent agt, int loadBalancingCause) {
+        private String coalitionIdForLoadBalancing;
+
+        public CNPInitiatorForIntraLoadBalancingAtoB(Agent agt, int loadBalancingCause, String coalitionIdForLoadBalancing) {
             super(null);
             this.loadBalancingCause = loadBalancingCause;
             this.agt = agt;
             this.decision = new Decision();
-            this.numberOfPotentialRespondents = coalitionMembers.size() - 1;
+            this.coalitionIdForLoadBalancing = coalitionIdForLoadBalancing;
         }
 
         @Override
         public void action() {
             try {
-
+                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(coalitionIdForLoadBalancing);
                 callForProposalsForLoadBalancing = new ACLMessage(ACLMessage.CFP);
+                numberOfPotentialRespondents = 0;
                 for (int i = 0; i < coalitionMembers.size(); i++) {
                     if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
                         callForProposalsForLoadBalancing.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
+                        numberOfPotentialRespondents++;
                     }
                 }
 
 
                 callForProposalsForLoadBalancing.setSender(agt.getAID());
-                callForProposalsForLoadBalancing.setConversationId(Consts.CONVERSATION_INTRA_LOAD_BALANCING_A_TO_B);
+                callForProposalsForLoadBalancing.setConversationId(Consts.CONVERSATION_LOAD_BALANCING_A_TO_B);
                 callForProposalsForLoadBalancing.setContent(String.valueOf(loadBalancingCause));
 
                 callForProposalsForLoadBalancing.setReplyWith(String.valueOf(agt.getLocalName() + "-" + String.valueOf(conversationId)));
@@ -1378,12 +1728,12 @@ public class HostAgent extends Agent {
 
                 addBehaviour(new ContractNetInitiator(agt, callForProposalsForLoadBalancing) {
                     @Override
-                    protected void handleNotUnderstood(ACLMessage notUnderstood){
+                    protected void handleNotUnderstood(ACLMessage notUnderstood) {
                         hostDescription.setInProgress(false);
                     }
 
                     @Override
-                    protected void handleOutOfSequence(ACLMessage notUnderstood){
+                    protected void handleOutOfSequence(ACLMessage notUnderstood) {
                         hostDescription.setInProgress(false);
                     }
 
@@ -1421,28 +1771,24 @@ public class HostAgent extends Agent {
                         int k = 0;
                         Vector responsesFromNotFailedHAs = new Vector<HostDescription>();
                         Vector responsesFromWillingNotFailedHAs = new Vector<HostDescription>();
-                        //System.out.println(responses.size());
                         while (k < responses.size()) {// responses from all the (PARTICIPANT) hosts
                             try {
                                 HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(k)).getContentObject();
-                                if (!participantHost.isFailed()){
-                                    //System.out.println(participantHost.getId()+" was added to NotFailed");
+                                if (!participantHost.isFailed()) {
+                                    //participantHost.getId()+" was added to NotFailed"
                                     responsesFromNotFailedHAs.add(responses.get(k));
-                                    if (participantHost.isWillingToParticipateInCNP()){
-                                        //System.out.println(participantHost.getId()+" was also added to WillingToParticipate");
+                                    if (participantHost.isWillingToParticipateInCNP()) {
+                                        //participantHost.getId()+" was also added to WillingToParticipate"
                                         responsesFromWillingNotFailedHAs.add(responses.get(k));
-                                    } else {
-                                        //System.out.println(participantHost.getId()+" is unwilling");
                                     }
-                                } else {
-                                    //System.out.println(participantHost.getId()+" has a failed status");
                                 }
-                           } catch (UnreadableException ex){
-                                System.out.println(ex);
+                            } catch (UnreadableException ex) {
+                                if (Consts.EXCEPTIONS) {
+                                    System.out.println(ex);
+                                }
                             }
                             k++;
                         }
-
 
 
                         if (responses.size() > 0) {
@@ -1472,10 +1818,13 @@ public class HostAgent extends Agent {
                             decision.setLowMigrationThresholdForMemory(thresholds[2]);
                             // thresholds[3]  high Memory
                             decision.setHighMigrationThresholdForMemory(thresholds[3]);
-                            hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
-                            hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
-                            hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
-                            hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+
+                            if (decision.getSourceHost().getCoalition() == decision.getDestinationHost().getCoalition()) {
+                                hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
+                                hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
+                                hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
+                                hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+                            }
 
 
                             ACLMessage msg;
@@ -1518,11 +1867,6 @@ public class HostAgent extends Agent {
                             }
 
 
-
-
-
-
-
                             if (proposalAccepted) {
                                 if (!Consts.LOG) {
                                     System.out.println("Agent " + decision.getDestinationHost().getId() + " was selected for Load Balancing from A to B. Load balancing cause " + loadBalancingCause);
@@ -1536,14 +1880,12 @@ public class HostAgent extends Agent {
                                     System.out.println("The decision was " + decision.getDecision());
                                 }
 
-                                if (Consts.INTER_LOAD_BALANCING_ENABLED && (decision.getDecision() == Consts.DECISION_TYPE_DONT_MIGRATE)) { // enact inter load balancing protocol 
-                                    // enact inter load balancing protocol 
-                                } else { //if inter load balancing is not enabled then just clean up and reset thresholds
-                                    resetAverageUsages();
-                                    resetCounters();
-                                    resetThresholdFlags();
-                                    hostDescription.setInProgress(false);
-                                }
+                                // just clean up and reset thresholds
+                                resetAverageUsages();
+                                resetCounters();
+                                resetThresholdFlags();
+                                hostDescription.setInProgress(false);
+
                             }
                         } else { // if no agent replied to the cfp, unlock vm 
                             if (!Consts.LOG) {
@@ -1567,7 +1909,7 @@ public class HostAgent extends Agent {
                             decision.getSelectedVM().setContainerName(inform.getContent());
                             decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
                             decision.getSelectedVM().setOwnerId(inform.getSender().getLocalName());
-                            operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "AtoB");
+                            operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "AtoB", null, null);
                             if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME())
                                 agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
                             resetAverageUsages();
@@ -1603,27 +1945,31 @@ public class HostAgent extends Agent {
         private Decision decision;
         private int loadBalancingCause;
         private int numberOfPotentialRespondents;
+        private String coalitionIdForLoadBalancing;
 
-        public CNPInitiatorForIntraLoadBalancingBtoA(Agent agt, int loadBalancingCause) {
+        public CNPInitiatorForIntraLoadBalancingBtoA(Agent agt, int loadBalancingCause, String coalitionIdForLoadBalancing) {
             super(null);
             this.loadBalancingCause = loadBalancingCause;
             this.agt = agt;
             this.decision = new Decision();
-            this.numberOfPotentialRespondents = coalitionMembers.size() - 1;
+            this.coalitionIdForLoadBalancing = coalitionIdForLoadBalancing;
         }
 
         @Override
         public void action() {
             try {
 
+                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(coalitionIdForLoadBalancing);
                 ACLMessage callForProposalsForLoadBalancing = new ACLMessage(ACLMessage.CFP);
+                numberOfPotentialRespondents = 0;
                 for (int i = 0; i < coalitionMembers.size(); i++) {
                     if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
                         callForProposalsForLoadBalancing.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
+                        numberOfPotentialRespondents++;
                     }
                 }
                 callForProposalsForLoadBalancing.setSender(agt.getAID());
-                callForProposalsForLoadBalancing.setConversationId(Consts.CONVERSATION_INTRA_LOAD_BALANCING_B_TO_A);
+                callForProposalsForLoadBalancing.setConversationId(Consts.CONVERSATION_LOAD_BALANCING_B_TO_A);
                 callForProposalsForLoadBalancing.setContent(String.valueOf(loadBalancingCause));
 
                 callForProposalsForLoadBalancing.setReplyWith(String.valueOf(agt.getLocalName() + "-" + String.valueOf(conversationId)));
@@ -1634,12 +1980,12 @@ public class HostAgent extends Agent {
 
                 addBehaviour(new ContractNetInitiator(agt, callForProposalsForLoadBalancing) {
                     @Override
-                    protected void handleNotUnderstood(ACLMessage notUnderstood){
+                    protected void handleNotUnderstood(ACLMessage notUnderstood) {
                         hostDescription.setInProgress(false);
                     }
 
                     @Override
-                    protected void handleOutOfSequence(ACLMessage notUnderstood){
+                    protected void handleOutOfSequence(ACLMessage notUnderstood) {
                         hostDescription.setInProgress(false);
                     }
 
@@ -1677,24 +2023,21 @@ public class HostAgent extends Agent {
                         int k = 0;
                         Vector responsesFromNotFailedHAs = new Vector<HostDescription>();
                         Vector responsesFromWillingNotFailedHAs = new Vector<HostDescription>();
-                        //System.out.println(responses.size());
                         while (k < responses.size()) {// responses from all the (PARTICIPANT) hosts
                             try {
                                 HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(k)).getContentObject();
-                                if (!participantHost.isFailed()){
-                                    //System.out.println(participantHost.getId()+" was added to NotFailed");
+                                if (!participantHost.isFailed()) {
+                                    //participantHost.getId()+" was added to NotFailed"
                                     responsesFromNotFailedHAs.add(responses.get(k));
-                                    if (participantHost.isWillingToParticipateInCNP()){
-                                        //System.out.println(participantHost.getId()+" was also added to WillingToParticipate");
+                                    if (participantHost.isWillingToParticipateInCNP()) {
+                                        //participantHost.getId()+" was also added to WillingToParticipate";
                                         responsesFromWillingNotFailedHAs.add(responses.get(k));
-                                    } else {
-                                        //System.out.println(participantHost.getId()+" is unwilling");
                                     }
-                                } else {
-                                    //System.out.println(participantHost.getId()+" has a failed status");
                                 }
-                            } catch (UnreadableException ex){
-                                System.out.println(ex);
+                            } catch (UnreadableException ex) {
+                                if (Consts.EXCEPTIONS) {
+                                    System.out.println(ex);
+                                }
                             }
                             k++;
                         }
@@ -1703,8 +2046,6 @@ public class HostAgent extends Agent {
                         if (responses.size() > 0) {
 
                             boolean proposalAccepted = false;
-                            //System.out.println("S" + responsesFromWillingNotFailedHAs);
-                            //System.out.println("L " + loadBalancingCause);
 
                             if (responsesFromWillingNotFailedHAs.size() > 0) {
                                 decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs,
@@ -1712,7 +2053,7 @@ public class HostAgent extends Agent {
                             } else {
                                 decision = new Decision();
                             }
-                            //System.out.println(decision);
+
                             int[] thresholds = {0,
                                     configuration.getTARGET_STD_DEV(),
                                     0,
@@ -1721,18 +2062,17 @@ public class HostAgent extends Agent {
                             if (responsesFromNotFailedHAs.size() > 0) {
                                 thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
                             }
-                            // thresholds[0]  low CPU
                             decision.setLowMigrationThresholdForCPU(thresholds[0]);
-                            // thresholds[1]  high CPU
                             decision.setHighMigrationThresholdForCPU(thresholds[1]);
-                            // thresholds[2]  low Memory
                             decision.setLowMigrationThresholdForMemory(thresholds[2]);
-                            // thresholds[3]  high Memory
                             decision.setHighMigrationThresholdForMemory(thresholds[3]);
-                            hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
-                            hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
-                            hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
-                            hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+
+                            if (decision.getSourceHost().getCoalition() == decision.getDestinationHost().getCoalition()) {
+                                hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
+                                hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
+                                hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
+                                hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+                            }
 
 
                             ACLMessage msg;
@@ -1789,14 +2129,11 @@ public class HostAgent extends Agent {
                                     System.out.println("The decision was " + decision.getDecision());
                                 }
 
-                                if (Consts.INTER_LOAD_BALANCING_ENABLED && (decision.getDecision() == Consts.DECISION_TYPE_DONT_MIGRATE)) { // enact inter load balancing protocol
-                                    // enact inter load balancing protocol
-                                } else { //if inter load balancing is not enabled then just clean up and reset thresholds
-                                    resetAverageUsages();
-                                    resetCounters();
-                                    resetThresholdFlags();
-                                    hostDescription.setInProgress(false);
-                                }
+                                // if just clean up and reset thresholds
+                                resetAverageUsages();
+                                resetCounters();
+                                resetThresholdFlags();
+                                hostDescription.setInProgress(false);
                             }
                         } else { // if no agent replied to the cfp, unlock vm
                             if (!Consts.LOG) {
@@ -1858,23 +2195,23 @@ public class HostAgent extends Agent {
 
             MessageTemplate subtemplate = MessageTemplate.and(
                     MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_CONTRACT_NET),
-                    MessageTemplate.MatchConversationId(Consts.CONVERSATION_INTRA_LOAD_BALANCING_B_TO_A));
+                    MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_B_TO_A));
             MessageTemplate template = MessageTemplate.and(subtemplate,
                     MessageTemplate.MatchPerformative(ACLMessage.CFP));
 
             addBehaviour(new ContractNetResponder(agt, template) {
                 @Override
-                protected void handleOutOfSequence(ACLMessage msg){
+                protected void handleOutOfSequence(ACLMessage msg) {
                     hostDescription.setInProgress(false);
                 }
+
                 @Override
                 protected ACLMessage handleCfp(ACLMessage cfp) throws NotUnderstoodException, RefuseException {
                     resetAverageUsages();
                     resetCounters();
-                    //System.out.println("HEY");
-                    return handleCallForProposals(agt, cfp);  // handleCallForProposals sets inProgress to true; 
+                    return handleCallForProposals(agt, cfp);  // handleCallForProposals sets inProgress to true;
                 }
-// B TO A
+
                 @Override
                 protected ACLMessage handleAcceptProposal(ACLMessage cfp, ACLMessage propose, ACLMessage accept) throws FailureException {
                     ACLMessage inform = accept.createReply();
@@ -1888,10 +2225,11 @@ public class HostAgent extends Agent {
                         Decision decision = (Decision) accept.getContentObject();
 
                         decision.getSelectedVM().setContainerName(decision.getDestinationHost().getContainerName());
-                        //decision.getSelectedVM().setContainerName(agt.getContainerController().getContainerName());
                         decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
                         decision.getSelectedVM().setOwnerId(accept.getSender().getLocalName());
-                        operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "BtoA");
+
+
+                        operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "BtoA", null, null);
                         if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME())
                             agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
                         resetAverageUsages();
@@ -1901,10 +2239,12 @@ public class HostAgent extends Agent {
                         if (!Consts.LOG) {
                             System.out.println("I " + agt.getAID() + " updated his migration thresholds because of acceptance BtoA");
                         }
-                        hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
-                        hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
-                        hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
-                        hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                        if (decision.getSourceHost().getCoalition() == decision.getDestinationHost().getCoalition()) {
+                            hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
+                            hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
+                            hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
+                            hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                        }
 
                     } catch (Exception ex) {
                         if (Consts.EXCEPTIONS) {
@@ -1920,10 +2260,12 @@ public class HostAgent extends Agent {
                         Decision decision = (Decision) reject.getContentObject();
 
                         if (!failed) {
-                            hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
-                            hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
-                            hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
-                            hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                            if (decision.getSourceHost().getCoalition() == decision.getDestinationHost().getCoalition()) {
+                                hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
+                                hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
+                                hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
+                                hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                            }
                         } else {
                             hostDescription.setLowMigrationThresholdForCPU(0);
                             hostDescription.setHighMigrationThresholdForCPU(configuration.getTARGET_STD_DEV());
@@ -1967,14 +2309,14 @@ public class HostAgent extends Agent {
 
             MessageTemplate subtemplate = MessageTemplate.and(
                     MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_CONTRACT_NET),
-                    MessageTemplate.MatchConversationId(Consts.CONVERSATION_INTRA_LOAD_BALANCING_A_TO_B));
+                    MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_A_TO_B));
             MessageTemplate template = MessageTemplate.and(subtemplate,
                     MessageTemplate.MatchPerformative(ACLMessage.CFP));
 
             addBehaviour(new ContractNetResponder(agt, template) {
 
                 @Override
-                protected void handleOutOfSequence(ACLMessage msg){
+                protected void handleOutOfSequence(ACLMessage msg) {
                     hostDescription.setInProgress(false);
                 }
 
@@ -1997,11 +2339,12 @@ public class HostAgent extends Agent {
                             System.out.println("Agent " + getLocalName() + " accept proposal from Agent " + cfp.getSender());
                         }
                         inform.setContent(agt.getContainerController().getContainerName());
-
-                        hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
-                        hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
-                        hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
-                        hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                        if (decision.getSourceHost().getCoalition() == decision.getDestinationHost().getCoalition()) {
+                            hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
+                            hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
+                            hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
+                            hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                        }
                         if (!Consts.LOG) {
                             System.out.println("I " + agt.getAID() + " updated his migration thresholds because of acceptance AtoB");
                         }
@@ -2019,10 +2362,12 @@ public class HostAgent extends Agent {
                         Decision decision = (Decision) reject.getContentObject();
 
                         if (!failed) {
-                            hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
-                            hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
-                            hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
-                            hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                            if (decision.getSourceHost().getCoalition() == decision.getDestinationHost().getCoalition()) {
+                                hostDescription.setLowMigrationThresholdForCPU(decision.getLowMigrationThresholdForCPU());
+                                hostDescription.setHighMigrationThresholdForCPU(decision.getHighMigrationThresholdForCPU());
+                                hostDescription.setLowMigrationThresholdForMemory(decision.getLowMigrationThresholdForMemory());
+                                hostDescription.setHighMigrationThresholdForMemory(decision.getHighMigrationThresholdForMemory());
+                            }
                         } else {
                             hostDescription.setLowMigrationThresholdForCPU(0);
                             hostDescription.setHighMigrationThresholdForCPU(configuration.getTARGET_STD_DEV());
@@ -2056,10 +2401,10 @@ public class HostAgent extends Agent {
             result = cfp.createReply();
             result.setPerformative(ACLMessage.PROPOSE);
             if (!hostDescription.isInProgress() && !failed) {
-                    hostDescription.setInProgress(true);
-                    hostDescription.setWillingToParticipateInCNP(true);
+                hostDescription.setInProgress(true);
+                hostDescription.setWillingToParticipateInCNP(true);
             } else {// If there are already some locked/compromised resources or the host has failed, simply refuse to participate in CFPs.
-                    hostDescription.setWillingToParticipateInCNP(false);
+                hostDescription.setWillingToParticipateInCNP(false);
             }
             result.setContentObject(hostDescription);
         } catch (Exception ex) {

@@ -22,6 +22,8 @@ class VirtualMachineDescription implements java.io.Serializable, Comparable<Virt
     private String containerName;
     private String ownerId;
     private String previousOwnerId;
+    private int ownerCoalition;
+    private int previousOwnerCoalition;
     private String migrationType; //AtoB or BtoA
     private int migrationCause;
     private int coalition;
@@ -47,6 +49,22 @@ class VirtualMachineDescription implements java.io.Serializable, Comparable<Virt
         this.lock = false;
         this.containerName = "";
         this.migrationType = "";
+    }
+
+    public int getOwnerCoalition() {
+        return ownerCoalition;
+    }
+
+    public void setOwnerCoalition(int ownerCoalition) {
+        this.ownerCoalition = ownerCoalition;
+    }
+
+    public int getPreviousOwnerCoalition() {
+        return previousOwnerCoalition;
+    }
+
+    public void setPreviousOwnerCoalition(int previousOwnerCoalition) {
+        this.previousOwnerCoalition = previousOwnerCoalition;
     }
 
     public void setId(String id) {

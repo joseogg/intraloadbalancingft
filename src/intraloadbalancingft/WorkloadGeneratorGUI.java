@@ -9,13 +9,17 @@ package intraloadbalancingft;
  */
 public class WorkloadGeneratorGUI extends javax.swing.JFrame {
 
+
     /**
      * Creates new form WorkloadGeneratorGUI
      */
     private jade.wrapper.AgentContainer workloadGeneratorContainer;
+    private Object[] workloadGeneratorContainerParams;
 
-    public WorkloadGeneratorGUI(jade.wrapper.AgentContainer workloadGeneratorContainer) {
+
+    public WorkloadGeneratorGUI(jade.wrapper.AgentContainer workloadGeneratorContainer, Object[] workloadGeneratorContainerParams) {
         this.workloadGeneratorContainer = workloadGeneratorContainer;
+        this.workloadGeneratorContainerParams = workloadGeneratorContainerParams;
         initComponents();
     }
 
@@ -70,7 +74,7 @@ public class WorkloadGeneratorGUI extends javax.swing.JFrame {
 
     private void startSimulationRun() {
         try {
-            workloadGeneratorContainer.createNewAgent("WorkloadGeneratorAgent", "intraloadbalancing.WorkloadGeneratorAgent", null);
+            workloadGeneratorContainer.createNewAgent("WorkloadGeneratorAgent", "intraloadbalancingft.WorkloadGeneratorAgent", workloadGeneratorContainerParams);
             workloadGeneratorContainer.getAgent("WorkloadGeneratorAgent").start();
         } catch (Exception e) {
             if (Consts.EXCEPTIONS)

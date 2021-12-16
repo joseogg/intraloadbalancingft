@@ -13,9 +13,9 @@ import jade.core.behaviours.SimpleBehaviour;
 import jade.core.behaviours.TickerBehaviour;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
+
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Random;
+import java.util.*;
 import java.util.function.Predicate;
 
 /**
@@ -27,7 +27,7 @@ public class AllocatorAgent extends Agent {
     private int conversationId;
     private ArrayList<HostDescription> hosts;
     private ArrayList<HostDescription> possiblyCompromisedHosts;
-    private ArrayList<HostDescription> hostLeaders;
+    private ArrayList<String> hostLeaders;
 
     private Utilities utils;
     transient protected AllocatorAgentGUI allocatorAgentGUI; // Reference to the gui    
@@ -37,7 +37,18 @@ public class AllocatorAgent extends Agent {
 
     private static ExperimentRunConfiguration configuration;
 
+    private static Map<String, ArrayList<String>> switchToHosts;
+    //map.put("switchId", [HA1, HA2, ...] );
+    //map.get("switchId")); -> [HA1, HA2, ...]
+
+    private static Map<String, Integer> failedSwitches; // Integer -> number of ticks to remain failed
+    //map.put("switchId", 1000);
+    //map.get("switchId")); -> 1000
+
+
     public AllocatorAgent() {
+        switchToHosts = new HashMap<String, ArrayList<String>>();
+        failedSwitches = new HashMap<String, Integer>();
         possiblyCompromisedHosts = new ArrayList<HostDescription>();
         utils = new Utilities();
         conversationId = 0;
@@ -54,7 +65,7 @@ public class AllocatorAgent extends Agent {
 
         Object[] args = getArguments();
         hosts = (ArrayList<HostDescription>) args[0];
-        hostLeaders = (ArrayList<HostDescription>) args[1];  //Added by Joel 2020-06-24
+        hostLeaders = (ArrayList<String>) args[1];  //Added by Joel 2020-06-24
 
         configuration = (ExperimentRunConfiguration) args[2];
 
@@ -68,24 +79,105 @@ public class AllocatorAgent extends Agent {
         addBehaviour(new RequestsReceiver(this));
         addBehaviour(new MonitorListener(this));
 
-        // every 1000 check whether a switch has failed or unfailed
-        addBehaviour(new GenerateSwitchFailures(this, Consts.TICKS_FOR_SWITCH_FAILURE_GENERATION));
+        if (Consts.FAILURES_ARE_ENABLED) {
+            // every 1000 check whether a switch has failed or unfailed
+            addBehaviour(new GenerateSwitchFailures(this, Consts.TICKS_FOR_SWITCH_FAILURE_GENERATION));
+        }
+    }
 
+
+    /*
+    *
+    *
+
+    CLASS ATTRIBUTES
+
+
+    private static Map<String, ArrayList<String>> switchToHosts;
+    //map.put("switchId", [HA1, HA2, ...] );
+    //map.get("switchId")); -> [HA1, HA2, ...]
+
+    private static Map<String, Integer> failedSwitches; // Integer -> number of ticks to remain failed
+    //map.put("switchId", 1000);
+    //map.get("switchId")); -> 1000
+
+
+    * */
+
+    private static ArrayList<String> causeFailuresAndGetHostsFromFailedSwitch() {
+        // Randomnly select ***unfailed*** switch or switches based on a probability distribution
+        // Set a failureTicksDuration for each failed switch and then
+        //switchToHosts;
+        return null;
+    }
+
+    private static ArrayList<String> updateFailureTicksAndGetHostsFromNoLongerFailedSwitches() {
+        //failedSwitches;
+        //switchToHosts;
+        return null;
     }
 
     private class GenerateSwitchFailures extends TickerBehaviour {
 
         private ACLMessage msg;
+        private Agent agt;
 
         public GenerateSwitchFailures(Agent a, long period) {
             super(a, period);
+            this.agt = a;
         }
 
         @Override
         public synchronized void onTick() {
+            ArrayList<String> HostsFromRecentlyFailedSwitches = causeFailuresAndGetHostsFromFailedSwitch();
 
+            if (HostsFromRecentlyFailedSwitches != null) {
+                //for each host send message to disconnect hosts from the datacenter
+                ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                msg.setSender(agt.getAID());
+                msg.setConversationId(Consts.FAILURE_FROM_SWITCH);
+                msg.setContent("FAILED");
+                Iterator<String> hosts = HostsFromRecentlyFailedSwitches.iterator();
+                while (hosts.hasNext()) {
+                    String hostId = (String) hosts.next();
+                    AID to = new AID(hostId, AID.ISLOCALNAME);
+                    msg.addReceiver(to);
+                }
+                agt.send(msg);
+            }
+
+            ArrayList<String> HostsFromRecentlyUnfailedSwitches = updateFailureTicksAndGetHostsFromNoLongerFailedSwitches();
+            if (HostsFromRecentlyUnfailedSwitches != null) {
+                //for each host send message to connect hosts from the datacenter
+                ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                msg.setSender(agt.getAID());
+                msg.setConversationId(Consts.FAILURE_FROM_SWITCH);
+                msg.setContent("UNFAILED");
+                Iterator<String> hosts = HostsFromRecentlyUnfailedSwitches.iterator();
+                while (hosts.hasNext()) {
+                    String hostId = (String) hosts.next();
+                    AID to = new AID(hostId, AID.ISLOCALNAME);
+                    msg.addReceiver(to);
+                }
+                agt.send(msg);
+            }
+
+            //Conversion id for failure management between AllocatorAgent and HostAgents
             //public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
-            System.out.printf("HI");
+
+            //Create a dictionary of switches to keep track of their failure history
+            //this might be extracted from the xml file including the coalition structure
+
+            //using the dictionary determine what switches (randomly based on a distribution) will fail
+            //and for how long (randomly based on a distribution)
+
+            // if a switch failure occurs
+            //      Send a message to all the HostAgents associated with a given switch
+            //      update the dictionary of switches
+
+            // if failure period of a switch has reached the end of this failure period
+            //      Send a message to all the HostAgents associated with the unfailed switch
+            //      update the dictionary of switches
 
         }
     }
@@ -113,12 +205,12 @@ public class AllocatorAgent extends Agent {
             numberOfContinuousMigrations = 0;
             lastCPUStdDev = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
             lastMemoryStdDev = new double[Consts.TIME_WINDOW_IN_TERMS_OF_REPORTING_RATE];
-            consecutiveEqualLogs=0;
-            previousBalancingMetric="";
+            consecutiveEqualLogs = 0;
+            previousBalancingMetric = "";
             df = new DecimalFormat("0.##");
-            balancingMetric ="";
-            time=0;
-            logRecords=0;
+            balancingMetric = "";
+            time = 0;
+            logRecords = 0;
         }
 
         @Override
@@ -140,23 +232,13 @@ public class AllocatorAgent extends Agent {
             balancingMetric += "\"dataCenterMemoryStdDev\":" + df.format(stdDev("memory", hosts, -1)) + ", ";
             balancingMetric += "\"coalitions\": [";
 
-//            for (int i = 0; i < Consts.NUMBER_OF_COALITIONS; i++) {
-//                balancing_metric += "{\"id\":" + i + ", ";
-//                balancing_metric += "\"CPUMean\":" + df.format(mean("cpu", hosts, i)) + ", ";
-//                balancing_metric += "\"CPUStdDev\":" + df.format(stdDev("cpu", hosts, i)) + ", ";
-//                balancing_metric += "\"memoryMean\":" + df.format(mean("memory", hosts, i)) + ", ";
-//                balancing_metric += "\"memoryStdDev\":" + df.format(stdDev("memory", hosts, i)) + "}";
-//                if ((i + 1) < Consts.NUMBER_OF_COALITIONS) {
-//                    balancing_metric += ", ";
-//                }
-//            }
-
             for (int i = 0; i < hostLeaders.size(); i++) {
-                balancingMetric += "{\"id\":" + hostLeaders.get(i).getCoalition() + ", ";
-                balancingMetric += "\"CPUMean\":" + df.format(mean("cpu", hosts, hostLeaders.get(i).getCoalition())) + ", ";
-                balancingMetric += "\"CPUStdDev\":" + df.format(stdDev("cpu", hosts, hostLeaders.get(i).getCoalition())) + ", ";
-                balancingMetric += "\"memoryMean\":" + df.format(mean("memory", hosts, hostLeaders.get(i).getCoalition())) + ", ";
-                balancingMetric += "\"memoryStdDev\":" + df.format(stdDev("memory", hosts, hostLeaders.get(i).getCoalition())) + "}";
+                int coalitionId = Integer.valueOf(hostLeaders.get(i).replace("HostAgent", ""));
+                balancingMetric += "{\"id\":" + coalitionId + ", ";
+                balancingMetric += "\"CPUMean\":" + df.format(mean("cpu", hosts, coalitionId)) + ", ";
+                balancingMetric += "\"CPUStdDev\":" + df.format(stdDev("cpu", hosts, coalitionId)) + ", ";
+                balancingMetric += "\"memoryMean\":" + df.format(mean("memory", hosts, coalitionId)) + ", ";
+                balancingMetric += "\"memoryStdDev\":" + df.format(stdDev("memory", hosts, coalitionId)) + "}";
                 if ((i + 1) < hostLeaders.size()) {
                     balancingMetric += ", ";
                 }
@@ -165,12 +247,12 @@ public class AllocatorAgent extends Agent {
 
             balancingMetric += "], \"time\":" + time + "}";
 
-            if (!balancingMetric.equals(previousBalancingMetric)){
-                previousBalancingMetric =balancingMetric;
-                consecutiveEqualLogs=0;
+            if (!balancingMetric.equals(previousBalancingMetric)) {
+                previousBalancingMetric = balancingMetric;
+                consecutiveEqualLogs = 0;
             } else {
                 consecutiveEqualLogs++;
-                if (consecutiveEqualLogs > 300){
+                if (consecutiveEqualLogs > 300) {
                     System.exit(1);
                 }
             }
@@ -181,7 +263,7 @@ public class AllocatorAgent extends Agent {
                 if (Consts.LOG) {
                     System.out.println(balancingMetric);
                     logRecords++;
-                    if (logRecords >= Consts.NUMBER_OF_LOG_RECORDS){
+                    if (logRecords >= Consts.NUMBER_OF_LOG_RECORDS) {
                         System.exit(0);
                     }
 
@@ -258,7 +340,7 @@ public class AllocatorAgent extends Agent {
         if (coalition == -1) {
             n = hosts.size();
         } else {
-            for (int i=0; i < hosts.size(); i++) {
+            for (int i = 0; i < hosts.size(); i++) {
                 if (hosts.get(i).getCoalition() == coalition) {
                     n = n + 1;
                 }
@@ -402,7 +484,7 @@ public class AllocatorAgent extends Agent {
     private static HostDescription removeVMfromHost(HostDescription host, String VMIdtoBeRemoved) {
         HostDescription updatedHost = deepCopyHost(host);
         updatedHost.getVirtualMachinesHosted().clear();
-        for (int i=0; i < host.getVirtualMachinesHosted().size(); i++) {
+        for (int i = 0; i < host.getVirtualMachinesHosted().size(); i++) {
             if (!host.getVirtualMachinesHosted().get(i).getId().equals(VMIdtoBeRemoved)) {
                 updatedHost.getVirtualMachinesHosted().add(deepCopyVM(host.getVirtualMachinesHosted().get(i)));
             }
@@ -535,7 +617,7 @@ public class AllocatorAgent extends Agent {
 
         //System.out.println("ERROR 1 " +hosts);
         //System.out.println("ERROR 1.5 " +possiblyCompromisedHosts);
-        for (int i=0; i< hosts.size(); i++) {
+        for (int i = 0; i < hosts.size(); i++) {
             if (!possiblyCompromisedHosts.contains(hosts.get(i))) {
                 safeHosts.add(hosts.get(i));
             }
@@ -553,7 +635,7 @@ public class AllocatorAgent extends Agent {
                     double minCPUUsage = 101;
                     double maxCPUUsage = -1;
                     //for (HostDescription host : safeHosts) {
-                    for (int i=0; i<safeHosts.size(); i++) {
+                    for (int i = 0; i < safeHosts.size(); i++) {
                         if (safeHosts.get(i).getCPUUsage() < minCPUUsage) {
                             minCPUUsage = safeHosts.get(i).getCPUUsage();
                             destinationHost = safeHosts.get(i);
@@ -587,7 +669,7 @@ public class AllocatorAgent extends Agent {
                     double minMemoryUsage = 101;
                     double maxMemoryUsage = -1;
                     //System.out.println("ERROR 6 " + safeHosts);
-                    for (int i=0; i<safeHosts.size(); i++) {
+                    for (int i = 0; i < safeHosts.size(); i++) {
                         if (safeHosts.get(i).getMemoryUsage() < minMemoryUsage) {
                             minMemoryUsage = safeHosts.get(i).getMemoryUsage();
                             destinationHost = safeHosts.get(i);
@@ -995,8 +1077,8 @@ public class AllocatorAgent extends Agent {
             if (availableHosts.size() > 0) { // If the VM can be hosted in the Datacenter
                 HostDescription randomlySelectedHost = availableHosts.get((new Random()).nextInt(availableHosts.size()));
 
-                    agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
-                    stop(); // terminate ticker behavior
+                agt.addBehaviour(new virtualMachineAllocator(agt, randomlySelectedHost, vm)); // Allocate VM to a host selected at random.
+                stop(); // terminate ticker behavior
 
             }
 
@@ -1043,7 +1125,7 @@ public class AllocatorAgent extends Agent {
     private void updateHostsResourceConsumption(HostDescription hostDescriptionToBeUpdated) {
         try {
 
-            for (int i = 0; i< hosts.size(); i++) {
+            for (int i = 0; i < hosts.size(); i++) {
                 if (hosts.get(i).getId().equals(hostDescriptionToBeUpdated.getId())) {
                     hosts.get(i).setMemoryUsed(hostDescriptionToBeUpdated.getMemoryUsed());
                     hosts.get(i).setMemory(hostDescriptionToBeUpdated.getMemory());
