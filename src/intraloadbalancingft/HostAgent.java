@@ -38,6 +38,9 @@ public class HostAgent extends Agent {
 
     private Map<String, ArrayList<FailureRecord>> hostsFailures; // host agent id, lists of Failures
     private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
+
+
+
     private Map<String, String> hostAgentToCoalition; // member id to coalition
 
     private int thresholdViolationCounterForHighCPU;  // This is counting how many times thresholds of high cpu have been violated, the in/decreasing rate depends on the SMA's report frequency
