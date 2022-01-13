@@ -17,6 +17,9 @@ import jade.domain.FIPAAgentManagement.RefuseException;
 import jade.domain.FIPANames;
 import jade.proto.ContractNetInitiator;
 import jade.proto.ContractNetResponder;
+import org.apache.commons.math3.distribution.WeibullDistribution;
+import org.apache.commons.math3.random.JDKRandomGenerator;
+import org.apache.commons.math3.random.RandomGenerator;
 
 /**
  * @author JGUTIERRGARC
@@ -151,15 +154,15 @@ public class HostAgent extends Agent {
 
             // Behaviours required for fault-tolerance.
             if (Consts.FAILURES_ARE_ENABLED) {
-                addBehaviour(new SwitchFailureHandler(this));
-
+                // The SwitchFailureHandler behavior is disabled because so far no SwitchFailure are simulated
+                //addBehaviour(new SwitchFailureHandler(this));
                 addBehaviour(new ModelReceiver(this));
-
                 addBehaviour(new UpdateStatusFailure(this, 1000));
 
                 if (hostDescription.isLeader()){
+                    addBehaviour(new ModelReporter(this, 1000));
                     addBehaviour(new FailureLeaderListener(this));
-                    addBehaviour(new NotifyFailuresToOtherLeaders(this, 1000));
+                    addBehaviour(new NotifyFailuresToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
                     addBehaviour(new FailureSummariesListener(this));
                 }
 
@@ -207,6 +210,8 @@ public class HostAgent extends Agent {
         if (source.equals(destination)) {
             return 0;
         }
+
+
         Iterator<weightEdge> i = edges.iterator();
         while (i.hasNext()) {
             weightEdge edge = i.next();
@@ -231,6 +236,10 @@ public class HostAgent extends Agent {
         @Override
         public void onTick() {
             try {
+                // First, update the current leader's hosts failures
+                coalitionFailures.put(hostDescription.getId(), hostsFailures);
+
+                // Then notify other leaders
                 msg = new ACLMessage(ACLMessage.INFORM);
                 for (int i = 0; i < coalitionLeaders.size(); i++) { // notify all the leaders (except myself) about the failures
                     if (!coalitionLeaders.get(i).equals("HostAgent" + hostDescription.getCoalition())) {
@@ -267,20 +276,26 @@ public class HostAgent extends Agent {
                 return;
             }
             try {
-                HashMap<String, ArrayList<FailureRecord>> aFailureSummary = (HashMap<String, ArrayList<FailureRecord>>)msg.getContentObject();
-                System.out.println("Receiving a Failure summary from other agent " + String.valueOf(aFailureSummary));
+                HashMap<String, ArrayList<FailureRecord>> aFailureSummary = (HashMap<String, ArrayList<FailureRecord>>) msg.getContentObject();
                 //private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
                 coalitionFailures.put(msg.getSender().getLocalName(), aFailureSummary);
-
-                System.out.println("aaa " + coalitionFailures.get(msg.getSender().getLocalName()));
-
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("Hey 1123484" + ex);
                 }
             }
+
         }
     }
+
+    private static RandomGenerator rg = new JDKRandomGenerator();
+    private static WeibullDistribution  weibullDistribution = new WeibullDistribution(rg, 2, 3, WeibullDistribution.DEFAULT_INVERSE_ABSOLUTE_ACCURACY);
+
+    protected double calculateProbability() {
+        //new WeibullDistribution()
+        return weibullDistribution.sample();
+    }
+
 
     private class UpdateStatusFailure extends TickerBehaviour {
 
@@ -296,6 +311,7 @@ public class HostAgent extends Agent {
 
         @Override
         public synchronized void onTick() {
+            System.out.println(calculateProbability());
 
             if (failureTicksDuration > 0) {
                 failureTicksDuration--;
@@ -311,8 +327,12 @@ public class HostAgent extends Agent {
                         notifyBusinessAsUsualToLeader.setSender(agt.getAID());
                         notifyBusinessAsUsualToLeader.addReceiver(new AID(hostDescription.getMyLeader(), AID.ISLOCALNAME));
                         notifyBusinessAsUsualToLeader.setConversationId(Consts.CONVERSATION_FAILURE_NOTIFICATION);
-                        notifyBusinessAsUsualToLeader.setContentObject(new FailureRecord(failureStartTime, failureEndTime));
-                        System.out.println(hostDescription.getId()+"- notified its leader that is up again and failure's times");
+                        FailureRecord failure = new FailureRecord(failureStartTime, failureEndTime);
+                        notifyBusinessAsUsualToLeader.setContentObject(failure);
+                        System.out.println("{" +
+                                        "\"hostAgentId\":\"" + hostDescription.getId() + "\", " +
+                                        "\"coalitionId\":" + hostDescription.getCoalition() + ", " +
+                                        "\"failureDuration\":"+ failure.getFailureDuration()+"}");
                         agt.send(notifyBusinessAsUsualToLeader);
                     } catch (IOException ex) {
                         if (Consts.EXCEPTIONS) {
@@ -329,22 +349,11 @@ public class HostAgent extends Agent {
                 resetThresholdFlags();
                 failed = true;
                 hostDescription.setFailed(true);
-                failureTicksDuration = Math.round(Math.random() * 60); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
-                System.out.println(hostDescription.getId() + " failed for " + failureTicksDuration);
+                failureTicksDuration = Math.round(Math.random() * Consts.FAILURE_DURATION); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
+                //System.out.println(hostDescription.getId() + " failed for " + failureTicksDuration);
 
                 failureStartTime = System.currentTimeMillis();
                 failureEndTime = -1; // meaning it has not been defined yet
-
-
-                // Notify coalition leader that a failure has occurred.
-                // ACLMessage notifyFailureToLeader = new ACLMessage(ACLMessage.INFORM);
-                // AID to = new AID(hostDescription.getId(), AID.ISLOCALNAME);
-                // notifyFailureToLeader.setSender(agt.getAID());
-                // notifyFailureToLeader.addReceiver(new AID(hostDescription.getMyLeader(), AID.ISLOCALNAME));
-                // notifyFailureToLeader.setConversationId(Consts.CONVERSATION_FAILURE_NOTIFICATION);
-                // notifyFailureToLeader.setContent("DOWN");
-                // System.out.println(hostDescription.getId()+"- notified its leader that a failure has occurred");
-                // agt.send(notifyFailureToLeader);
             }
 
         }
@@ -782,14 +791,6 @@ public class HostAgent extends Agent {
                     } else { // it cannot host the vm
 
                         // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
-                        // To implement fault-tolerance, we may need to customize this message indicating the reason behind the failure
 
                         acknowledgementMsg = new ACLMessage(ACLMessage.FAILURE);
                         acknowledgementMsg.setConversationId(vm.getConversationId());
@@ -832,6 +833,7 @@ public class HostAgent extends Agent {
             }
             try {
                 logisticRegressionModel = (Object) (msg.getContentObject());
+//                System.out.println(msg.getSender() + " "+ hostDescription.getId());
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("It is here 116" + ex);
@@ -860,18 +862,12 @@ public class HostAgent extends Agent {
                 try {
 
                     FailureRecord failureRecord = (FailureRecord) msg.getContentObject();
-//                    System.out.println(msg.getSender().getLocalName());
-//                    System.out.println(failureRecord);
                     ArrayList<FailureRecord> failures = hostsFailures.get(msg.getSender().getLocalName());
-//                    System.out.println(failures);
                     if (failures == null)
                         failures = new ArrayList<FailureRecord>();
-//                    System.out.println(failures);
 
                     failures.add(failureRecord);
                     hostsFailures.put(msg.getSender().getLocalName(), failures);
-
-                    System.out.println("\n\n\n\n"+hostsFailures+"\n\n\n\n\n");
 
                 } catch (Exception ex) {
                     if (Consts.EXCEPTIONS) {
@@ -921,6 +917,40 @@ public class HostAgent extends Agent {
         }
     }
 
+
+    public static Object createModel() {
+        return null;
+    }
+    private class ModelReporter extends TickerBehaviour {
+
+        private ACLMessage msg;
+
+        public ModelReporter(Agent a, long period) {
+            super(a, period);
+        }
+
+        @Override
+        public void onTick() {
+            logisticRegressionModel = createModel();
+
+            try {
+                    msg = new ACLMessage(ACLMessage.INFORM);
+                    ArrayList<String> coalitionMembers = coalitionToHostAgents.get(hostDescription.getMyLeader());
+                    for (int i = 0; i < coalitionMembers.size(); i++) {
+                        if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
+                            msg.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
+                        }
+                    }
+                    msg.setConversationId(Consts.CONVERSATION_MODEL_UPDATE);
+                    msg.setContentObject((java.io.Serializable) logisticRegressionModel);
+                    send(msg);
+            } catch (Exception e) {
+                if (Consts.EXCEPTIONS)
+                    System.out.println("Hey 1143242" + e);
+            }
+        }
+
+    }
 
     private class VMWARE_RemoveAndMigrateVM extends CyclicBehaviour {
 

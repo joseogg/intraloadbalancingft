@@ -81,7 +81,7 @@ public class AllocatorAgent extends Agent {
 
         if (Consts.FAILURES_ARE_ENABLED) {
             // every 1000 check whether a switch has failed or unfailed
-            addBehaviour(new GenerateSwitchFailures(this, Consts.TICKS_FOR_SWITCH_FAILURE_GENERATION));
+            //addBehaviour(new GenerateSwitchFailures(this, Consts.TICKS_FOR_SWITCH_FAILURE_GENERATION));
         }
     }
 

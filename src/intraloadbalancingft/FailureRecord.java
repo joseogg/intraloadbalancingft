@@ -20,7 +20,7 @@ public class FailureRecord implements Serializable {
                 '}';
     }
 
-    public long getFailureTime() {
+    public long getFailureDuration() {
         return endFailure - startFailure;
     }
 

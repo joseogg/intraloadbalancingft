@@ -215,7 +215,7 @@ public class IntraLoadBalancingFT {
                 hostAgentParams[1] = leaders; // include all leaders
                 hostAgentParams[2] = listEdges;
                 hostAgentParams[3] = configuration;
-                hostAgentParams[4] = 0.8; //failureProbability TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
+                hostAgentParams[4] = Consts.FAILURE_PROBABILITY; //failureProbability TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
                 hostAgentParams[5] = setCoalitions; //allHostsAgents TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
                 hostContainers[i].createNewAgent(aHost.getId(), "intraloadbalancingft.HostAgent", hostAgentParams);
                 hostContainers[i].getAgent(aHost.getId()).start();

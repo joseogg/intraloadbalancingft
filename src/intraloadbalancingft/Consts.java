@@ -198,6 +198,9 @@ u-24tb1.metal 	448 	24576
     public static final boolean FAILURES_ARE_ENABLED = true;
     public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
     public static final long TICKS_FOR_SWITCH_FAILURE_GENERATION = 1000; // ms
+    public static final long TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS = 1000;
+    public static final double FAILURE_PROBABILITY = 0.01;
+    public static final double FAILURE_DURATION = 3;
 
 
     private Consts() {
