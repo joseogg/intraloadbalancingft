@@ -292,7 +292,7 @@ public class HostAgent extends Agent {
     private static WeibullDistribution  weibullDistribution = new WeibullDistribution(rg, 2, 3, WeibullDistribution.DEFAULT_INVERSE_ABSOLUTE_ACCURACY);
 
     protected double calculateProbability() {
-        //new WeibullDistribution()
+        //new WeibullDistribution() //test
         return weibullDistribution.sample();
     }
 
@@ -311,7 +311,7 @@ public class HostAgent extends Agent {
 
         @Override
         public synchronized void onTick() {
-            System.out.println(calculateProbability());
+            //System.out.println(calculateProbability());
 
             if (failureTicksDuration > 0) {
                 failureTicksDuration--;
