@@ -80,6 +80,7 @@ public final class Consts {
     public static final int MIGRATION_CAUSE_LOW_MEMORY = 3;
     public static final int MIGRATION_CAUSE_VMWARE_JUST_CPU = 4;    // This is for VMWARE load balancing
     public static final int MIGRATION_CAUSE_VMWARE_JUST_MEMORY = 5; // This is for VMWARE load balancing
+    public static final int MIGRATION_CAUSE_LACK_AVAILABILITY=6;
 
 
     public static final int TIMEOUT_FOR_CNP_INITIATOR_FOR_VM_MIGRATION = 150;
