@@ -39,9 +39,11 @@ public class HostAgent extends Agent {
     private ArrayList<String> coalitionLeaders;
     private Map<String, ArrayList<String>> coalitionToHostAgents; // coalition id, members
 
+
     private Map<String, ArrayList<FailureRecord>> hostsFailures; // host agent id, lists of Failures
     private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
-
+    private AvailableRecord myAvailability;  // I am not sure if this is valid only for the leader, or it is stored inside the dictionarys
+    private Map<String, ArrayList<AvailableRecord>> coalitionAvailabilities;
 
 
     private Map<String, String> hostAgentToCoalition; // member id to coalition
@@ -74,6 +76,9 @@ public class HostAgent extends Agent {
 
         coalitionFailures = new HashMap<String, Map<String, ArrayList<FailureRecord>>>();
         hostsFailures = new HashMap<String, ArrayList<FailureRecord>>();
+        myAvailability = new AvailableRecord(100);
+        coalitionAvailabilities = new HashMap<String,ArrayList<AvailableRecord>>();
+
 
 
         hostAgentToCoalition = new HashMap<String, String>();
