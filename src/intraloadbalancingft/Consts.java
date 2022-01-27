@@ -15,6 +15,7 @@ public final class Consts {
     public static final String EXHAUSTIVE = "EXHAUSTIVE";
     public static final String MAXMIN = "MAXMIN";
     public static final String ROULETTE = "ROULETTE";
+    public static final String WEIGHTSUM="WeightSum";
 
     ////// **** Constants for Workload Generation **** ///////
     public static final int AVG_INTERARRIVAL_TIME = 50; // in ms

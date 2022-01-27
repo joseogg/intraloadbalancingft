@@ -41,6 +41,9 @@ public class Heuristics {
             case Consts.MIGRATION_CAUSE_LOW_MEMORY:
                 this.resource = "memory";
                 this.protocolType = "BtoA";
+            case Consts.MIGRATION_CAUSE_LACK_AVAILABILITY:
+                this.resource = "availability";
+                this.protocolType= "AtoB";
         }
         // the heuristics
         if (heuristic.equals(Consts.EXHAUSTIVE))
@@ -49,6 +52,8 @@ public class Heuristics {
             heuristic_maxMinHostUsage();
         else if (heuristic.equals(Consts.ROULETTE))
             heuristic_roulette_wheel();
+        else if (heuristic.equals(Consts.WEIGHTSUM))
+            heuristic_weighted_sum();
     }
 
     double getDiameterNetwork() {
@@ -426,6 +431,50 @@ public class Heuristics {
             }
         }
     }
+
+    public void heuristic_weighted_sum() {
+        double val, max_val;
+        max_val = val = 0.0;
+        for (int i = 0; i < responses.size(); i++) {// responses from all the other (PARTICIPANT) hosts
+            try {
+                HostDescription participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
+                if (participantHost == null) // ¿porqué a veces ocurre esto?
+                    continue;
+                if (protocolType.equals("AtoB")) {
+                    if (hostDescription.getVirtualMachinesHosted() != null && hostDescription.getVirtualMachinesHosted().size() > 0) {
+                        for (int j = 0; j < hostDescription.getVirtualMachinesHosted().size(); j++) {
+                            if ((hostDescription.getVirtualMachinesHosted().get(j).getNumberOfVirtualCores() <= participantHost.getAvailableVirtualCores()) && (hostDescription.getVirtualMachinesHosted().get(j).getMemory() <= participantHost.getAvailableMemory())) // is the vm fit in the proposed host?
+                            {
+                                val = valuation_function(participantHost, hostDescription.getVirtualMachinesHosted().get(j));
+                                if (val > max_val) {
+                                    this.selectedHost = participantHost;
+                                    this.selectedVM = hostDescription.getVirtualMachinesHosted().get(j);
+                                    this.valuationValue = max_val = val;
+                                }
+                            }
+                        }
+                    }
+                } else if (protocolType.equals("BtoA")) {
+                    if (participantHost.getVirtualMachinesHosted() != null && participantHost.getVirtualMachinesHosted().size() > 0) {
+                        for (int j = 0; j < participantHost.getVirtualMachinesHosted().size(); j++) {
+                            if ((participantHost.getVirtualMachinesHosted().get(j).getNumberOfVirtualCores() <= hostDescription.getAvailableVirtualCores()) && (participantHost.getVirtualMachinesHosted().get(j).getMemory() <= hostDescription.getAvailableMemory())) // is the proposed vm fit in the host?
+                            {
+                                val = valuation_function(hostDescription, participantHost.getVirtualMachinesHosted().get(j));
+                                if (val > max_val) {
+                                    this.selectedHost = participantHost;
+                                    this.selectedVM = participantHost.getVirtualMachinesHosted().get(j);
+                                    this.valuationValue = max_val = val;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (UnreadableException ex) {
+                Logger.getLogger(HostAgent.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+
 
 
 }
