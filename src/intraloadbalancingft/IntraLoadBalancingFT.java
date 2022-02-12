@@ -20,7 +20,13 @@ public class IntraLoadBalancingFT {
     private static ExperimentRunConfiguration configuration;
 
     public static void main(String[] args) {
-
+//        WeibullFailureGeneration failureGeneration = new WeibullFailureGeneration();
+//        for (int i=0; i<failureGeneration.bathtub.length; i++) {
+//            System.out.println(failureGeneration.bathtub[i]+",");
+//        }
+//        for (int i=0; i<Consts.LIFE_SPAN; i++) {
+//            System.out.println(failureGeneration.failed(i)+",");
+//        }
 
         try {
             // Logging experiment's output in a file.
@@ -39,7 +45,7 @@ public class IntraLoadBalancingFT {
             // args 9 : VMWARE_MAX_MIGRATIONS
 
 
-            String XML_FILE = "./fat_trees/big_fat_tree_datacenterCoalitions8_1.XML";
+            String XML_FILE = "./fat_trees/big_fat_tree_datacenterCoalitions8_1.xml";
             String fileSufix = "";
             String outputDirectory = "./";
             int initialPort = 30000;

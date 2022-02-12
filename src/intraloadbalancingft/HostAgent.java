@@ -17,9 +17,6 @@ import jade.domain.FIPAAgentManagement.RefuseException;
 import jade.domain.FIPANames;
 import jade.proto.ContractNetInitiator;
 import jade.proto.ContractNetResponder;
-import org.apache.commons.math3.distribution.WeibullDistribution;
-import org.apache.commons.math3.random.JDKRandomGenerator;
-import org.apache.commons.math3.random.RandomGenerator;
 
 /**
  * @author JGUTIERRGARC
@@ -39,12 +36,8 @@ public class HostAgent extends Agent {
     private ArrayList<String> coalitionLeaders;
     private Map<String, ArrayList<String>> coalitionToHostAgents; // coalition id, members
 
-
     private Map<String, ArrayList<FailureRecord>> hostsFailures; // host agent id, lists of Failures
     private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
-    private AvailableRecord myAvailability;  // I am not sure if this is valid only for the leader, or it is stored inside the dictionarys
-    private Map<String, ArrayList<AvailableRecord>> coalitionAvailabilities;
-
 
     private Map<String, String> hostAgentToCoalition; // member id to coalition
 
@@ -68,17 +61,18 @@ public class HostAgent extends Agent {
 
     private static ExperimentRunConfiguration configuration;
 
+    private WeibullFailureGeneration failureGeneration;
+    private int lifeProgress;
 
     public HostAgent() {
         logisticRegressionModel = new Object();
         coalitionToHostAgents = new HashMap<String, ArrayList<String>>();
 
+        failureGeneration = new WeibullFailureGeneration();
+        lifeProgress = 0;
 
         coalitionFailures = new HashMap<String, Map<String, ArrayList<FailureRecord>>>();
         hostsFailures = new HashMap<String, ArrayList<FailureRecord>>();
-        myAvailability = new AvailableRecord(100);
-        coalitionAvailabilities = new HashMap<String,ArrayList<AvailableRecord>>();
-
 
 
         hostAgentToCoalition = new HashMap<String, String>();
@@ -136,10 +130,8 @@ public class HostAgent extends Agent {
                 addBehaviour(new CNPParticipantForIntraLoadBalancingAtoB(this)); // the agent always listens for potential requests for Intra Load Balancing from A (this source host) to B (a destination host).
                 addBehaviour(new CNPParticipantForIntraLoadBalancingBtoA(this)); // the agent always listens for potential requests for Intra Load Balancing from B (an external host) to A (this destination host).
                 if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME()) {
-                    if (hostDescription.isLeader())
-                        addBehaviour(new LeaderListenerForCounterReset(this));
-                    else
-                        addBehaviour(new MemberListenerForCounterReset(this));
+                    if (hostDescription.isLeader()) addBehaviour(new LeaderListenerForCounterReset(this));
+                    else addBehaviour(new MemberListenerForCounterReset(this));
                 }
             } else if (configuration.getLOAD_BALANCING_TYPE() == Consts.VMWARE_CENTRALIZED_WITH_NO_COALITIONS) {
                 addBehaviour(new VMWARE_RemoveAndMigrateVM(this));
@@ -163,8 +155,9 @@ public class HostAgent extends Agent {
                 //addBehaviour(new SwitchFailureHandler(this));
                 addBehaviour(new ModelReceiver(this));
                 addBehaviour(new UpdateStatusFailure(this, 1000));
+                addBehaviour(new IncreaseLifeProgress(this, 1000));
 
-                if (hostDescription.isLeader()){
+                if (hostDescription.isLeader()) {
                     addBehaviour(new ModelReporter(this, 1000));
                     addBehaviour(new FailureLeaderListener(this));
                     addBehaviour(new NotifyFailuresToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
@@ -180,7 +173,6 @@ public class HostAgent extends Agent {
             }
         }
     }
-
 
 
     private String selectCoalitionForLoadbalancing() {
@@ -222,13 +214,26 @@ public class HostAgent extends Agent {
             weightEdge edge = i.next();
             String in = "HostAgent" + edge.getInNode();
             String out = "HostAgent" + edge.getOutNode();
-            if ((in.equals(source) && out.equals(destination)) ||
-                    (in.equals(destination) && out.equals(source)))
+            if ((in.equals(source) && out.equals(destination)) || (in.equals(destination) && out.equals(source)))
                 return edge.getDistance();
         }
         return -1;
     }
 
+    private class IncreaseLifeProgress extends TickerBehaviour {
+
+        public IncreaseLifeProgress(Agent a, long period) {
+            super(a, period);
+        }
+
+        @Override
+        public void onTick() {
+            if (lifeProgress < Consts.LIFE_SPAN) {
+                lifeProgress++;
+            }
+        }
+
+    }
 
     private class NotifyFailuresToOtherLeaders extends TickerBehaviour {
 
@@ -255,8 +260,7 @@ public class HostAgent extends Agent {
                 msg.setContentObject((java.io.Serializable) hostsFailures);
                 send(msg);
             } catch (Exception e) {
-                if (Consts.EXCEPTIONS)
-                    System.out.println("Hey 11343" + e);
+                if (Consts.EXCEPTIONS) System.out.println("Hey 11343" + e);
             }
         }
     }
@@ -293,14 +297,6 @@ public class HostAgent extends Agent {
         }
     }
 
-    private static RandomGenerator rg = new JDKRandomGenerator();
-    private static WeibullDistribution  weibullDistribution = new WeibullDistribution(rg, 2, 3, WeibullDistribution.DEFAULT_INVERSE_ABSOLUTE_ACCURACY);
-
-    protected double calculateProbability() {
-        //new WeibullDistribution() //test
-        return weibullDistribution.sample();
-    }
-
 
     private class UpdateStatusFailure extends TickerBehaviour {
 
@@ -316,14 +312,14 @@ public class HostAgent extends Agent {
 
         @Override
         public synchronized void onTick() {
-            //System.out.println(calculateProbability());
-
+            //System.out.println(failureTicksDuration+ " "+ hostDescription.getCPUUsage() + " " +hostDescription.getId() + " " + failed );
             if (failureTicksDuration > 0) {
                 failureTicksDuration--;
-                if (failureTicksDuration == 0) {
+                if (failureTicksDuration <= 0) {
                     try {
                         //System.out.println(hostDescription.getId()+ " is up again");
-                        failureEndTime = System.currentTimeMillis();; // meaning it has not been defined yet
+                        failureEndTime = System.currentTimeMillis();
+
                         failed = false;
                         hostDescription.setFailed(false);
                         // Notify coalition leader that the server is up again
@@ -334,29 +330,23 @@ public class HostAgent extends Agent {
                         notifyBusinessAsUsualToLeader.setConversationId(Consts.CONVERSATION_FAILURE_NOTIFICATION);
                         FailureRecord failure = new FailureRecord(failureStartTime, failureEndTime);
                         notifyBusinessAsUsualToLeader.setContentObject(failure);
-                        System.out.println("{" +
-                                        "\"hostAgentId\":\"" + hostDescription.getId() + "\", " +
-                                        "\"coalitionId\":" + hostDescription.getCoalition() + ", " +
-                                        "\"failureDuration\":"+ failure.getFailureDuration()+"}");
+                        System.out.println("{" + "\"hostAgentId\":\"" + hostDescription.getId() + "\", " + "\"coalitionId\":" + hostDescription.getCoalition() + ", " + "\"failureDuration\":" + failure.getFailureDuration() + "}");
                         agt.send(notifyBusinessAsUsualToLeader);
                     } catch (IOException ex) {
                         if (Consts.EXCEPTIONS) {
                             System.out.println("Hey Failure 1" + ex);
                         }
                     }
-
-
                 }
             }
-            if ((!failed) && (Math.random() < failureProbability) && !hostDescription.isInProgress()) {
+            if ((!failed) && (failureGeneration.failed(lifeProgress)) && !hostDescription.isInProgress()) {
                 resetAverageUsages();
                 resetCounters();
                 resetThresholdFlags();
                 failed = true;
                 hostDescription.setFailed(true);
                 failureTicksDuration = Math.round(Math.random() * Consts.FAILURE_DURATION); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
-                //System.out.println(hostDescription.getId() + " failed for " + failureTicksDuration);
-
+                if (failureTicksDuration == 0) failureTicksDuration = 1;
                 failureStartTime = System.currentTimeMillis();
                 failureEndTime = -1; // meaning it has not been defined yet
             }
@@ -719,15 +709,7 @@ public class HostAgent extends Agent {
 
                             int sourceCoalition = Integer.valueOf(hostAgentToCoalition.get(vm.getPreviousOwnerId()).replace("HostAgent", ""));
                             int destinationCoalition = Integer.valueOf(hostAgentToCoalition.get(vm.getOwnerId()).replace("HostAgent", ""));
-                            System.out.println("{\"source_coalition\":" + String.valueOf(sourceCoalition)
-                                    + ", \"destination_coalition\":" + String.valueOf(destinationCoalition)
-                                    + ", \"migrationType\":\"" + vm.getMigrationType() + "\""
-                                    + ", \"origin\":\"" + vm.getPreviousOwnerId() + "\""
-                                    + ", \"destination\":\"" + vm.getOwnerId() + "\""
-                                    + ", \"vmid\":\"" + vm.getId() + "\""
-                                    + ", \"distance\":" + getDistance(vm.getPreviousOwnerId(), vm.getOwnerId())
-                                    + ", \"time\":" + System.currentTimeMillis()
-                                    + "}");
+                            System.out.println("{\"source_coalition\":" + String.valueOf(sourceCoalition) + ", \"destination_coalition\":" + String.valueOf(destinationCoalition) + ", \"migrationType\":\"" + vm.getMigrationType() + "\"" + ", \"origin\":\"" + vm.getPreviousOwnerId() + "\"" + ", \"destination\":\"" + vm.getOwnerId() + "\"" + ", \"vmid\":\"" + vm.getId() + "\"" + ", \"distance\":" + getDistance(vm.getPreviousOwnerId(), vm.getOwnerId()) + ", \"time\":" + System.currentTimeMillis() + "}");
                             //}
                         }
                     } else { // it cannot host the vm
@@ -859,26 +841,25 @@ public class HostAgent extends Agent {
 
         @Override
         public void action() {
-                ACLMessage msg = receive(mt);
-                if (msg == null) {
-                    block();
-                    return;
+            ACLMessage msg = receive(mt);
+            if (msg == null) {
+                block();
+                return;
+            }
+            try {
+
+                FailureRecord failureRecord = (FailureRecord) msg.getContentObject();
+                ArrayList<FailureRecord> failures = hostsFailures.get(msg.getSender().getLocalName());
+                if (failures == null) failures = new ArrayList<FailureRecord>();
+
+                failures.add(failureRecord);
+                hostsFailures.put(msg.getSender().getLocalName(), failures);
+
+            } catch (Exception ex) {
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("It is here 888" + ex);
                 }
-                try {
-
-                    FailureRecord failureRecord = (FailureRecord) msg.getContentObject();
-                    ArrayList<FailureRecord> failures = hostsFailures.get(msg.getSender().getLocalName());
-                    if (failures == null)
-                        failures = new ArrayList<FailureRecord>();
-
-                    failures.add(failureRecord);
-                    hostsFailures.put(msg.getSender().getLocalName(), failures);
-
-                } catch (Exception ex) {
-                    if (Consts.EXCEPTIONS) {
-                        System.out.println("It is here 888" + ex);
-                    }
-                }
+            }
         }
     }
 
@@ -926,6 +907,7 @@ public class HostAgent extends Agent {
     public static Object createModel() {
         return null;
     }
+
     private class ModelReporter extends TickerBehaviour {
 
         private ACLMessage msg;
@@ -939,19 +921,18 @@ public class HostAgent extends Agent {
             logisticRegressionModel = createModel();
 
             try {
-                    msg = new ACLMessage(ACLMessage.INFORM);
-                    ArrayList<String> coalitionMembers = coalitionToHostAgents.get(hostDescription.getMyLeader());
-                    for (int i = 0; i < coalitionMembers.size(); i++) {
-                        if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
-                            msg.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
-                        }
+                msg = new ACLMessage(ACLMessage.INFORM);
+                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(hostDescription.getMyLeader());
+                for (int i = 0; i < coalitionMembers.size(); i++) {
+                    if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
+                        msg.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
                     }
-                    msg.setConversationId(Consts.CONVERSATION_MODEL_UPDATE);
-                    msg.setContentObject((java.io.Serializable) logisticRegressionModel);
-                    send(msg);
+                }
+                msg.setConversationId(Consts.CONVERSATION_MODEL_UPDATE);
+                msg.setContentObject((java.io.Serializable) logisticRegressionModel);
+                send(msg);
             } catch (Exception e) {
-                if (Consts.EXCEPTIONS)
-                    System.out.println("Hey 1143242" + e);
+                if (Consts.EXCEPTIONS) System.out.println("Hey 1143242" + e);
             }
         }
 
@@ -1084,18 +1065,14 @@ public class HostAgent extends Agent {
             if (memoryUsage > 100) {
                 memoryUsage = 100;
             }
-            if (!failed)
-                hostDescription.setMemoryUsage(memoryUsage);
-            else
-                hostDescription.setMemoryUsage(0);
+            if (!failed) hostDescription.setMemoryUsage(memoryUsage);
+            else hostDescription.setMemoryUsage(0);
             CPUUsage = (100 * sumCPUUsage) / hostDescription.getNumberOfVirtualCores();
             if (CPUUsage > 100) {
                 CPUUsage = 100;
             }
-            if (!failed)
-                hostDescription.setCPUUsage(CPUUsage);
-            else
-                hostDescription.setCPUUsage(0);
+            if (!failed) hostDescription.setCPUUsage(CPUUsage);
+            else hostDescription.setCPUUsage(0);
         } else {
             hostDescription.setMemoryUsage(0);
             hostDescription.setCPUUsage(0);
@@ -1834,16 +1811,12 @@ public class HostAgent extends Agent {
                             boolean proposalAccepted = false;
 
                             if (responsesFromWillingNotFailedHAs.size() > 0) {
-                                decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs,
-                                        loadBalancingCause);
+                                decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs, loadBalancingCause);
                             } else {
                                 decision = new Decision();
                             }
 
-                            int[] thresholds = {0,
-                                    configuration.getTARGET_STD_DEV(),
-                                    0,
-                                    configuration.getTARGET_STD_DEV()};
+                            int[] thresholds = {0, configuration.getTARGET_STD_DEV(), 0, configuration.getTARGET_STD_DEV()};
 
                             if (responsesFromNotFailedHAs.size() > 0) {
                                 thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
@@ -2086,16 +2059,12 @@ public class HostAgent extends Agent {
                             boolean proposalAccepted = false;
 
                             if (responsesFromWillingNotFailedHAs.size() > 0) {
-                                decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs,
-                                        loadBalancingCause);
+                                decision = selectHostAgentBasedOnCoalitionUtility(responsesFromWillingNotFailedHAs, loadBalancingCause);
                             } else {
                                 decision = new Decision();
                             }
 
-                            int[] thresholds = {0,
-                                    configuration.getTARGET_STD_DEV(),
-                                    0,
-                                    configuration.getTARGET_STD_DEV()};
+                            int[] thresholds = {0, configuration.getTARGET_STD_DEV(), 0, configuration.getTARGET_STD_DEV()};
 
                             if (responsesFromNotFailedHAs.size() > 0) {
                                 thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
@@ -2231,11 +2200,8 @@ public class HostAgent extends Agent {
                 System.out.println("Agent " + getLocalName() + " waiting for CFP for Intra Load Balancing from B to A ...");
             }
 
-            MessageTemplate subtemplate = MessageTemplate.and(
-                    MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_CONTRACT_NET),
-                    MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_B_TO_A));
-            MessageTemplate template = MessageTemplate.and(subtemplate,
-                    MessageTemplate.MatchPerformative(ACLMessage.CFP));
+            MessageTemplate subtemplate = MessageTemplate.and(MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_CONTRACT_NET), MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_B_TO_A));
+            MessageTemplate template = MessageTemplate.and(subtemplate, MessageTemplate.MatchPerformative(ACLMessage.CFP));
 
             addBehaviour(new ContractNetResponder(agt, template) {
                 @Override
@@ -2345,11 +2311,8 @@ public class HostAgent extends Agent {
                 System.out.println("Agent " + getLocalName() + " waiting for CFP for Intra Load Balancing from A to B ...");
             }
 
-            MessageTemplate subtemplate = MessageTemplate.and(
-                    MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_CONTRACT_NET),
-                    MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_A_TO_B));
-            MessageTemplate template = MessageTemplate.and(subtemplate,
-                    MessageTemplate.MatchPerformative(ACLMessage.CFP));
+            MessageTemplate subtemplate = MessageTemplate.and(MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_CONTRACT_NET), MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_A_TO_B));
+            MessageTemplate template = MessageTemplate.and(subtemplate, MessageTemplate.MatchPerformative(ACLMessage.CFP));
 
             addBehaviour(new ContractNetResponder(agt, template) {
 

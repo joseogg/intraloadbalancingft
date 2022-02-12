@@ -4,6 +4,8 @@
  * and open the template in the editor.
  */
 package intraloadbalancingft;
+import java.util.stream.IntStream;
+import java.util.Collections;
 
 /**
  * @author octavio
@@ -15,7 +17,6 @@ public final class Consts {
     public static final String EXHAUSTIVE = "EXHAUSTIVE";
     public static final String MAXMIN = "MAXMIN";
     public static final String ROULETTE = "ROULETTE";
-    public static final String WEIGHTSUM="WeightSum";
 
     ////// **** Constants for Workload Generation **** ///////
     public static final int AVG_INTERARRIVAL_TIME = 50; // in ms
@@ -23,7 +24,7 @@ public final class Consts {
 
 
 //    public static final int AVG_INTERDEPARTURE_TIME = 20000; // in ms
-//    public static final int NUMBER_OF_VMS = 20000;
+//    public static final int NUMBER_OF_VMNUMBER_OF_VMSS = 20000;
 
 //    public static final int AVG_INTERDEPARTURE_TIME = 25000; // in ms
 //    public static final int NUMBER_OF_VMS = 30000;
@@ -81,7 +82,6 @@ public final class Consts {
     public static final int MIGRATION_CAUSE_LOW_MEMORY = 3;
     public static final int MIGRATION_CAUSE_VMWARE_JUST_CPU = 4;    // This is for VMWARE load balancing
     public static final int MIGRATION_CAUSE_VMWARE_JUST_MEMORY = 5; // This is for VMWARE load balancing
-    public static final int MIGRATION_CAUSE_LACK_AVAILABILITY=6;
 
 
     public static final int TIMEOUT_FOR_CNP_INITIATOR_FOR_VM_MIGRATION = 150;
@@ -204,6 +204,22 @@ u-24tb1.metal 	448 	24576
     public static final double FAILURE_PROBABILITY = 0.01;
     public static final double FAILURE_DURATION = 3;
 
+
+    ////// **** Constants for Failure Generation based on a Weibull Distribution **** ///////
+
+    public static final double LEFT_BETA = 0.8;
+    public static final double RIGHT_BETA = 5;
+
+    // life span of two years = 120 + 245 + 365
+    public static final int EARLY_LIFE_DAYS = 120;
+    public static final int USEFUL_LIFE_DAYS = 245;
+    public static final int WEAROUT_LIFE_DAYS = 365;
+    public static final int LIFE_SPAN = EARLY_LIFE_DAYS + USEFUL_LIFE_DAYS + WEAROUT_LIFE_DAYS;
+
+    public static final double MAX_EARLY_LIFE_FAILURE_RATE = 0.2;
+    public static final double MAX_USEFUL_LIFE_FAILURE_RATE = 0.01;
+    public static final double MAX_WEAROUT_LIFE_FAILURE_RATE = 0.4;
+    public static final double MIN_FAILURE_RATE = 0.00000000001;
 
     private Consts() {
         throw new AssertionError();
