@@ -345,8 +345,14 @@ public class HostAgent extends Agent {
                 resetThresholdFlags();
                 failed = true;
                 hostDescription.setFailed(true);
-                failureTicksDuration = Math.round(Math.random() * Consts.FAILURE_DURATION); // TBD TBD TBD TBD TBD TBD TBD TBD TBD TBD
-                if (failureTicksDuration == 0) failureTicksDuration = 1;
+                // Normally distributed failure duration
+                // in the range (1, Consts.MEAN_FAILURE_DURATION + Consts.STD_DEV_FAILURE_DURATION * 2)
+                Random randomGenerator = new Random();
+                failureTicksDuration = Math.round(Consts.MEAN_FAILURE_DURATION + randomGenerator.nextGaussian() * Consts.STD_DEV_FAILURE_DURATION);
+                if (failureTicksDuration <= 0)
+                    failureTicksDuration = 1;
+                else if (failureTicksDuration > (Consts.MEAN_FAILURE_DURATION + Consts.STD_DEV_FAILURE_DURATION * 2))
+                    failureTicksDuration = (long) (Consts.MEAN_FAILURE_DURATION + Consts.STD_DEV_FAILURE_DURATION * 2);
                 failureStartTime = System.currentTimeMillis();
                 failureEndTime = -1; // meaning it has not been defined yet
             }
