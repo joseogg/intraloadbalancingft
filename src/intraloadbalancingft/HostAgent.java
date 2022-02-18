@@ -153,7 +153,7 @@ public class HostAgent extends Agent {
             if (Consts.FAILURES_ARE_ENABLED) {
                 // The SwitchFailureHandler behavior is disabled because so far no SwitchFailure are simulated
                 //addBehaviour(new SwitchFailureHandler(this));
-                addBehaviour(new ModelReceiver(this));
+
                 addBehaviour(new UpdateStatusFailure(this, 1000));
                 addBehaviour(new IncreaseLifeProgress(this, 1000));
 
@@ -162,8 +162,9 @@ public class HostAgent extends Agent {
                     addBehaviour(new FailureLeaderListener(this));
                     addBehaviour(new NotifyFailuresToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
                     addBehaviour(new FailureSummariesListener(this));
+                } else { // Only non-leader agent needs to receive information from leaders
+                    addBehaviour(new ModelReceiver(this));
                 }
-
 
             }
 
@@ -825,8 +826,8 @@ public class HostAgent extends Agent {
                 return;
             }
             try {
-                logisticRegressionModel = (Object) (msg.getContentObject());
-//                System.out.println(msg.getSender() + " "+ hostDescription.getId());
+                coalitionFailures  = (Map<String, Map<String, ArrayList<FailureRecord>>> ) msg.getContentObject();
+                //System.out.println(coalitionFailures);
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("It is here 116" + ex);
@@ -935,7 +936,8 @@ public class HostAgent extends Agent {
                     }
                 }
                 msg.setConversationId(Consts.CONVERSATION_MODEL_UPDATE);
-                msg.setContentObject((java.io.Serializable) logisticRegressionModel);
+                //msg.setContentObject((java.io.Serializable) logisticRegressionModel);
+                msg.setContentObject((java.io.Serializable) coalitionFailures);
                 send(msg);
             } catch (Exception e) {
                 if (Consts.EXCEPTIONS) System.out.println("Hey 1143242" + e);
