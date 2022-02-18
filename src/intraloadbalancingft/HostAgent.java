@@ -346,7 +346,7 @@ public class HostAgent extends Agent {
                 failed = true;
                 hostDescription.setFailed(true);
                 // Normally distributed failure duration
-                // in the range (1, Consts.MEAN_FAILURE_DURATION + Consts.STD_DEV_FAILURE_DURATION * 2)
+                // in the range [1, Consts.MEAN_FAILURE_DURATION + Consts.STD_DEV_FAILURE_DURATION * 2]
                 Random randomGenerator = new Random();
                 failureTicksDuration = Math.round(Consts.MEAN_FAILURE_DURATION + randomGenerator.nextGaussian() * Consts.STD_DEV_FAILURE_DURATION);
                 if (failureTicksDuration <= 0)
