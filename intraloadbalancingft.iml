@@ -12,5 +12,7 @@
     <orderEntry type="library" name="blueprints-core-2.6.0" level="project" />
     <orderEntry type="library" name="commons-math3-3.6.1" level="project" />
     <orderEntry type="library" name="commons-math3-3.6.1-javadoc" level="project" />
+    <orderEntry type="library" name="Java EE 6-Java EE 6" level="project" />
+    <orderEntry type="library" name="activemq-all-5.16.4" level="project" />
   </component>
 </module>

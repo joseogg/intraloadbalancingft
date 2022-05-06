@@ -177,6 +177,11 @@ public class HostAgent extends Agent {
 
 
     private String selectCoalitionForLoadbalancing() {
+
+        DecisionRequest producer = new DecisionRequest();
+        producer.produceMessages(hostDescription.getId());
+
+
         // for testing purposes, right now it selects a coalition at random
         return coalitionLeaders.get((new Random()).nextInt(coalitionLeaders.size()));
     }
