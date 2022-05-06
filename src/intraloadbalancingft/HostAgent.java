@@ -64,6 +64,12 @@ public class HostAgent extends Agent {
     private WeibullFailureGeneration failureGeneration;
     private int lifeProgress;
 
+    // Frequency of data center server replacement worldwide 2018-2020
+    // As per data from a recent report, in 2020, 42 percent of respondents
+    // mentioned that they refreshed their data center servers every two to/
+    // three years, whilst 26 percent stated that they did so every year.
+    // https://www.statista.com/statistics/1109492/frequency-of-data-center-system-refresh-replacement-worldwide/
+
     public HostAgent() {
         logisticRegressionModel = new Object();
         coalitionToHostAgents = new HashMap<String, ArrayList<String>>();
@@ -236,6 +242,13 @@ public class HostAgent extends Agent {
         public void onTick() {
             if (lifeProgress < Consts.LIFE_SPAN) {
                 lifeProgress++;
+            } else {
+                lifeProgress = 0;
+                // Frequency of data center server replacement worldwide 2018-2020
+                // As per data from a recent report, in 2020, 42 percent of respondents
+                // mentioned that they refreshed their data center servers every two to/
+                // three years, whilst 26 percent stated that they did so every year.
+                // https://www.statista.com/statistics/1109492/frequency-of-data-center-system-refresh-replacement-worldwide/
             }
         }
 

@@ -217,6 +217,12 @@ u-24tb1.metal 	448 	24576
     public static final int WEAROUT_LIFE_DAYS = 365;
     public static final int LIFE_SPAN = EARLY_LIFE_DAYS + USEFUL_LIFE_DAYS + WEAROUT_LIFE_DAYS;
 
+    // Frequency of data center server replacement worldwide 2018-2020
+    // As per data from a recent report, in 2020, 42 percent of respondents
+    // mentioned that they refreshed their data center servers every two to/
+    // three years, whilst 26 percent stated that they did so every year.
+    // https://www.statista.com/statistics/1109492/frequency-of-data-center-system-refresh-replacement-worldwide/
+
     public static final double MAX_EARLY_LIFE_FAILURE_RATE = 0.2;
     public static final double MAX_USEFUL_LIFE_FAILURE_RATE = 0.01;
     public static final double MAX_WEAROUT_LIFE_FAILURE_RATE = 0.4;
