@@ -14,6 +14,7 @@ public final class Consts {
     public static final int DISTRIBUTED_FIXED_COALITIONS = 0;
     public static final int VMWARE_CENTRALIZED_WITH_NO_COALITIONS = 1;
 
+
     public static final String EXHAUSTIVE = "EXHAUSTIVE";
     public static final String MAXMIN = "MAXMIN";
     public static final String ROULETTE = "ROULETTE";
@@ -21,6 +22,7 @@ public final class Consts {
     ////// **** Constants for Workload Generation **** ///////
     public static final int AVG_INTERARRIVAL_TIME = 50; // in ms
     public static final int AVG_INTERDEPARTURE_TIME = 25000; // in ms
+
 
 
 //    public static final int AVG_INTERDEPARTURE_TIME = 20000; // in ms
@@ -136,9 +138,14 @@ u-24tb1.metal 	448 	24576
 
     ////// **** Constants for Agent Conversations  **** ///////
 
+    // conversation to listen for hosts' information from other coalition leaders
+    public static final String CONVERSATION_HOSTS_INFORMATION = "CONVERSATION_HOSTS_INFORMATION";
+
+
     // conversation where host agents receive vm resource usage messages from virtual machine agents
     // conversation where virtual machine agents sends vm resource usage messages to host agents 
     public static final String CONVERSATION_MONITOR_VM = "CONVERSATION_MONITOR_VM";
+    public static final String CONVERSATION_MONITOR_HA = "CONVERSATION_MONITOR_HA";
 
     public static final String CONVERSATION_MIGRATE = "CONVERSATION_MIGRATE";
 
@@ -197,7 +204,7 @@ u-24tb1.metal 	448 	24576
     public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
 
     ////// **** Constants for Failure Management **** ///////
-    public static final boolean FAILURES_ARE_ENABLED = false;
+    public static final boolean FAILURES_ARE_ENABLED = true;
     public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
     public static final long TICKS_FOR_SWITCH_FAILURE_GENERATION = 1000; // ms
     public static final long TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS = 1000;
