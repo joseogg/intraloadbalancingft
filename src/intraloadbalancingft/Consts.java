@@ -140,6 +140,8 @@ u-24tb1.metal 	448 	24576
 
     // conversation to listen for hosts' information from other coalition leaders
     public static final String CONVERSATION_HOSTS_INFORMATION = "CONVERSATION_HOSTS_INFORMATION";
+    public static final String CONVERSATION_HOSTS_INFORMATION_FROM_LEADER = "CONVERSATION_HOSTS_INFORMATION_FROM_LEADER";
+    public static final String CONVERSATION_HOSTS_FAILURES_FROM_LEADER = "CONVERSATION_HOSTS_FAILURES_FROM_LEADER";
 
 
     // conversation where host agents receive vm resource usage messages from virtual machine agents

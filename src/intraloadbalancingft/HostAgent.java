@@ -45,9 +45,9 @@ public class HostAgent extends Agent {
     private Map<String, ArrayList<String>> coalitionToHostAgents; // coalition id, members
 
     private ArrayList<HostDescription> internalHostsInformation; //  list of hostDescritpions belonging to the current ledear agent's coalition
-    private Map<String, ArrayList<HostDescription>> hostsInformation; // coalition id, list of hosts' descriptions
+    private Map<String, ArrayList<HostDescription>> dataCenterHostsInformation; // coalition id, list of hosts' descriptions
     private Map<String, ArrayList<FailureRecord>> hostsFailures; // host agent id, lists of Failures
-    private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
+    private Map<String, Map<String, ArrayList<FailureRecord>>> dataCenterFailures; // coalition id, [host agent id, lists of Failures]
 
     private Map<String, String> hostAgentToCoalition; // member id to coalition
 
@@ -87,9 +87,9 @@ public class HostAgent extends Agent {
         failureGeneration = new WeibullFailureGeneration();
         lifeProgress = 0;
 
-        coalitionFailures = new HashMap<String, Map<String, ArrayList<FailureRecord>>>();
+        dataCenterFailures = new HashMap<String, Map<String, ArrayList<FailureRecord>>>();
         hostsFailures = new HashMap<String, ArrayList<FailureRecord>>();
-        hostsInformation = new HashMap<String, ArrayList<HostDescription>>();
+        dataCenterHostsInformation = new HashMap<String, ArrayList<HostDescription>>();
         internalHostsInformation = new ArrayList<HostDescription>();
 
 
@@ -181,14 +181,17 @@ public class HostAgent extends Agent {
                 addBehaviour(new IncreaseLifeProgress(this, 1000));
 
                 if (hostDescription.isLeader()) {
+
                     addBehaviour(new HostsInformationLeaderListener(this));
-                    addBehaviour(new ModelReporter(this, 1000));
+                    addBehaviour(new NotifyFailuresToMembers(this, 1000));
+                    addBehaviour(new NotifyHostsInformationToMembers(this, 1000));
                     addBehaviour(new FailureLeaderListener(this));
                     addBehaviour(new NotifyFailuresToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
                     addBehaviour(new NotifyHostsInformationToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
                     addBehaviour(new FailureSummariesListener(this));
                 } else { // Only non-leader agent needs to receive information from leaders
-                    addBehaviour(new ModelReceiver(this));
+                    addBehaviour(new HostsInformationFromLeaderListener(this));
+                    addBehaviour(new HostsFailuresFromLeaderListener(this));
                 }
 
             }
@@ -356,7 +359,7 @@ public class HostAgent extends Agent {
         public void onTick() {
             try {
                 // First, update the current leader's hosts failures
-                coalitionFailures.put(hostDescription.getId(), hostsFailures);
+                dataCenterFailures.put(hostDescription.getId(), hostsFailures);
 
                 // Then notify other leaders
                 msg = new ACLMessage(ACLMessage.INFORM);
@@ -387,7 +390,7 @@ public class HostAgent extends Agent {
         public void onTick() {
             try {
                 // First, update the current leader's hosts failures
-                hostsInformation.put(hostDescription.getId(), internalHostsInformation);
+                dataCenterHostsInformation.put(hostDescription.getId(), internalHostsInformation);
 
                 // Then notify other leaders
                 msg = new ACLMessage(ACLMessage.INFORM);
@@ -427,7 +430,7 @@ public class HostAgent extends Agent {
             try {
                 HashMap<String, ArrayList<FailureRecord>> aFailureSummary = (HashMap<String, ArrayList<FailureRecord>>) msg.getContentObject();
                 //private Map<String, Map<String, ArrayList<FailureRecord>>> coalitionFailures; // coalition id, [host agent id, lists of Failures]
-                coalitionFailures.put(msg.getSender().getLocalName(), aFailureSummary);
+                dataCenterFailures.put(msg.getSender().getLocalName(), aFailureSummary);
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("Hey 1123484" + ex);
@@ -947,14 +950,14 @@ public class HostAgent extends Agent {
         }
     }
 
-    private class ModelReceiver extends CyclicBehaviour {
+    private class HostsFailuresFromLeaderListener extends CyclicBehaviour {
 
         private Agent agt;
         private MessageTemplate mt;
 
-        public ModelReceiver(Agent agt) {
+        public HostsFailuresFromLeaderListener(Agent agt) {
             this.agt = agt;
-            this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_MODEL_UPDATE);
+            this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_HOSTS_FAILURES_FROM_LEADER);
         }
 
         @Override
@@ -965,8 +968,8 @@ public class HostAgent extends Agent {
                 return;
             }
             try {
-                coalitionFailures  = (Map<String, Map<String, ArrayList<FailureRecord>>> ) msg.getContentObject();
-                //System.out.println(coalitionFailures);
+                dataCenterFailures  = (Map<String, Map<String, ArrayList<FailureRecord>>> ) msg.getContentObject();
+                //System.out.println("------"+hostDescription.getId()+"------\n"+dataCenterFailures);
             } catch (Exception ex) {
                 if (Consts.EXCEPTIONS) {
                     System.out.println("It is here 116" + ex);
@@ -995,28 +998,73 @@ public class HostAgent extends Agent {
             try {
 
                 ArrayList<HostDescription> aListOfHostDescriptions = (ArrayList<HostDescription>) msg.getContentObject();
-                hostsInformation.put(msg.getSender().getLocalName(), aListOfHostDescriptions);
+                dataCenterHostsInformation.put(msg.getSender().getLocalName(), aListOfHostDescriptions);
 
-                /*
+/*
                 // iterating through key/value mappings
                 System.out.println("Entries: ");
-                for(Entry<String, ArrayList<HostDescription>> entry: hostsInformation.entrySet()) {
+                for(Entry<String, ArrayList<HostDescription>> entry: dataCenterHostsInformation.entrySet()) {
                     System.out.println(entry.getKey());
                     for (HostDescription host : entry.getValue()) {
                         System.out.println(host.getId()+" " + String.valueOf(host.getCPUUsage())+" " +String.valueOf(host.getMemoryUsage()));
                     }
 
                 }
-                 */
 
+*/
             } catch (Exception ex) {
 
                 if (Consts.EXCEPTIONS) {
-                    System.out.println("It is here 888" + ex);
+                    System.out.println("It is here 889" + ex);
                 }
             }
         }
     }
+
+    private class HostsInformationFromLeaderListener extends CyclicBehaviour {
+
+        private Agent agt;
+        private MessageTemplate mt;
+
+        public HostsInformationFromLeaderListener(Agent agt) {
+            this.agt = agt;
+            this.mt = MessageTemplate.MatchConversationId(Consts.CONVERSATION_HOSTS_INFORMATION_FROM_LEADER);
+        }
+
+        @Override
+        public void action() {
+            ACLMessage msg = receive(mt);
+            if (msg == null) {
+                block();
+                return;
+            }
+            try {
+
+                dataCenterHostsInformation = (Map<String, ArrayList<HostDescription>>) msg.getContentObject();
+
+                /*
+                // iterating through key/value mappings
+                System.out.println(hostDescription.getId()+"'s Entries: ");
+                for(Entry<String, ArrayList<HostDescription>> entry: dataCenterHostsInformation.entrySet()) {
+                    System.out.println(hostDescription.getId()+" ------ " + entry.getKey());
+                    for (HostDescription host : entry.getValue()) {
+                        System.out.println(hostDescription.getId()+" ------ " + host.getId()+" " + String.valueOf(host.getCPUUsage())+" " +String.valueOf(host.getMemoryUsage())+ " "+ host.isFailed()) ;
+                    }
+
+                }
+                 */
+
+
+            } catch (Exception ex) {
+
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("It is here 890" + ex);
+                }
+            }
+        }
+    }
+
+
 
     private class FailureLeaderListener extends CyclicBehaviour {
 
@@ -1092,23 +1140,22 @@ public class HostAgent extends Agent {
         }
     }
 
-
     public static Object createModel() {
         return null;
     }
 
 
-    private class ModelReporter extends TickerBehaviour {
+
+    private class NotifyFailuresToMembers extends TickerBehaviour {
 
         private ACLMessage msg;
 
-        public ModelReporter(Agent a, long period) {
+        public NotifyFailuresToMembers(Agent a, long period) {
             super(a, period);
         }
 
         @Override
         public void onTick() {
-            logisticRegressionModel = createModel();
 
             try {
                 msg = new ACLMessage(ACLMessage.INFORM);
@@ -1118,11 +1165,11 @@ public class HostAgent extends Agent {
                         msg.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
                     }
                 }
-                msg.setConversationId(Consts.CONVERSATION_MODEL_UPDATE);
+                msg.setConversationId(Consts.CONVERSATION_HOSTS_FAILURES_FROM_LEADER);
                 //msg.setContentObject((java.io.Serializable) logisticRegressionModel);
-                msg.setContentObject((java.io.Serializable) coalitionFailures);
+                msg.setContentObject((java.io.Serializable) dataCenterFailures);
 
-                String json = new Gson().toJson(coalitionFailures);
+                String json = new Gson().toJson(dataCenterFailures);
                 //System.out.println("-------"+json);
                 send(msg);
             } catch (Exception e) {
@@ -1131,6 +1178,39 @@ public class HostAgent extends Agent {
         }
 
     }
+
+    private class NotifyHostsInformationToMembers extends TickerBehaviour {
+
+        private ACLMessage msg;
+
+        public NotifyHostsInformationToMembers(Agent a, long period) {
+            super(a, period);
+        }
+
+        @Override
+        public void onTick() {
+
+            try {
+                msg = new ACLMessage(ACLMessage.INFORM);
+                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(hostDescription.getMyLeader());
+                for (int i = 0; i < coalitionMembers.size(); i++) {
+                    if (!coalitionMembers.get(i).equals(hostDescription.getId())) {
+                        msg.addReceiver(new AID(coalitionMembers.get(i), AID.ISLOCALNAME));
+                    }
+                }
+                msg.setConversationId(Consts.CONVERSATION_HOSTS_INFORMATION_FROM_LEADER);
+                msg.setContentObject((java.io.Serializable) dataCenterHostsInformation);
+
+                String json = new Gson().toJson(dataCenterHostsInformation);
+                //System.out.println("-------"+json);
+                send(msg);
+            } catch (Exception e) {
+                if (Consts.EXCEPTIONS) System.out.println("Hey 1143242" + e);
+            }
+        }
+
+    }
+
 
     private class VMWARE_RemoveAndMigrateVM extends CyclicBehaviour {
 
