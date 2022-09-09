@@ -39,7 +39,7 @@ public class DecisionRequest {
             textMessage = session.createTextMessage();
 
             textMessage.setText(message);
-            System.out.println("Sending the following message: " + textMessage.getText());
+            //System.out.println("Sending the following message: " + textMessage.getText());
             messageProducer.send(textMessage);
 
             messageProducer.close();

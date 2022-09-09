@@ -17,12 +17,12 @@ import jade.lang.acl.MessageTemplate;
 import jade.lang.acl.UnreadableException;
 import jade.proto.ContractNetInitiator;
 import jade.proto.ContractNetResponder;
-import org.springframework.ejb.interceptor.SpringBeanAutowiringInterceptor;
+import jade.proto.ProposeInitiator;
+import jade.proto.ProposeResponder;
 
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Predicate;
-import java.util.Map.Entry;
 
 /**
  * @author JGUTIERRGARC
@@ -149,7 +149,8 @@ public class HostAgent extends Agent {
                     addBehaviour(new MonitorHAListener(this));
                 }
 
-                addBehaviour(new CNPParticipantForIntraLoadBalancingAtoB(this)); // the agent always listens for potential requests for Intra Load Balancing from A (this source host) to B (a destination host).
+//                addBehaviour(new CNPParticipantForIntraLoadBalancingAtoB(this)); // the agent always listens for potential requests for Intra Load Balancing from A (this source host) to B (a destination host).
+                addBehaviour(new ParticipantForIntraLoadBalancingAtoB(this)); // the agent always listens for potential requests for Intra Load Balancing from A (this source host) to B (a destination host).
                 addBehaviour(new CNPParticipantForIntraLoadBalancingBtoA(this)); // the agent always listens for potential requests for Intra Load Balancing from B (an external host) to A (this destination host).
                 addBehaviour(new PerformanceReporter(this, Consts.HOST_REPORTING_RATE));
                 if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME()) {
@@ -172,6 +173,20 @@ public class HostAgent extends Agent {
             addBehaviour(new VirtualMachineKiller(this, (long) (Consts.AVG_INTERDEPARTURE_TIME * (-Math.log(Math.random())))));
             addBehaviour(new MonitorVMListener(this));
 
+            if (hostDescription.isLeader()) {
+                addBehaviour(new HostsInformationLeaderListener(this));
+                addBehaviour(new NotifyHostsInformationToMembers(this, 1000));
+                addBehaviour(new NotifyHostsInformationToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
+
+                addBehaviour(new NotifyFailuresToMembers(this, 1000));
+                addBehaviour(new FailureLeaderListener(this));
+                addBehaviour(new NotifyFailuresToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
+                addBehaviour(new FailureSummariesListener(this));
+            } else { // Only non-leader agent needs to receive information from leaders
+                addBehaviour(new HostsInformationFromLeaderListener(this));
+                addBehaviour(new HostsFailuresFromLeaderListener(this));
+            }
+
             // Behaviours required for fault-tolerance.
             if (Consts.FAILURES_ARE_ENABLED) {
                 // The SwitchFailureHandler behavior is disabled because so far no SwitchFailure are simulated
@@ -181,16 +196,11 @@ public class HostAgent extends Agent {
                 addBehaviour(new IncreaseLifeProgress(this, 1000));
 
                 if (hostDescription.isLeader()) {
-
-                    addBehaviour(new HostsInformationLeaderListener(this));
                     addBehaviour(new NotifyFailuresToMembers(this, 1000));
-                    addBehaviour(new NotifyHostsInformationToMembers(this, 1000));
                     addBehaviour(new FailureLeaderListener(this));
                     addBehaviour(new NotifyFailuresToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
-                    addBehaviour(new NotifyHostsInformationToOtherLeaders(this, Consts.TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS));
                     addBehaviour(new FailureSummariesListener(this));
                 } else { // Only non-leader agent needs to receive information from leaders
-                    addBehaviour(new HostsInformationFromLeaderListener(this));
                     addBehaviour(new HostsFailuresFromLeaderListener(this));
                 }
 
@@ -261,8 +271,6 @@ public class HostAgent extends Agent {
                     System.out.println(host.getId()+" " + String.valueOf(host.getCPUUsage())+" " +String.valueOf(host.getMemoryUsage()));
                 }
 */
-
-
             } catch (Exception ex) {
 
                 if (Consts.EXCEPTIONS) {
@@ -272,13 +280,30 @@ public class HostAgent extends Agent {
         }
     }
 
-    private String selectCoalitionForLoadbalancing() {
+    private String requestDecision() {
+        // also sends the time window
+        // also sends the time window
+        // also sends the time window
+        // also sends the time window
+        // also sends the time window
+        // also sends the time window
+
+        // removing old failure record
+        // removing old failure record
+        // removing old failure record
+        // removing old failure record
+        // removing old failure record
+        // removing old failure record
 
         DecisionRequest producer = new DecisionRequest();
-        producer.produceMessages(hostDescription.getId());
 
-        String json = new Gson().toJson(hostDescription);
+        DataCenterInformation information = new DataCenterInformation(dataCenterHostsInformation, dataCenterFailures);
+        String json = new Gson().toJson(information);
         System.out.println(json);
+        producer.produceMessages(json);
+
+//        String json = new Gson().toJson(hostDescription);
+        //System.out.println(json);
 
 
         // for testing purposes, right now it selects a coalition at random
@@ -1000,18 +1025,34 @@ public class HostAgent extends Agent {
                 ArrayList<HostDescription> aListOfHostDescriptions = (ArrayList<HostDescription>) msg.getContentObject();
                 dataCenterHostsInformation.put(msg.getSender().getLocalName(), aListOfHostDescriptions);
 
-/*
+                // getting information of the hostAgent's coalition members
+                ArrayList<HostDescription> coalitionMembers = dataCenterHostsInformation.get(hostDescription.getMyLeader());
+
+                int[] thresholds = {0, configuration.getTARGET_STD_DEV(), 0, configuration.getTARGET_STD_DEV()};
+                if (coalitionMembers != null) {
+                    if (coalitionMembers.size() > 0) {
+                        thresholds = calculateNewThresholds(coalitionMembers);
+                    }
+                }
+                hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
+                hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
+                hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
+                hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+
+
                 // iterating through key/value mappings
+                /*
                 System.out.println("Entries: ");
-                for(Entry<String, ArrayList<HostDescription>> entry: dataCenterHostsInformation.entrySet()) {
+                for(Map.Entry<String, ArrayList<HostDescription>> entry: dataCenterHostsInformation.entrySet()) {
                     System.out.println(entry.getKey());
                     for (HostDescription host : entry.getValue()) {
                         System.out.println(host.getId()+" " + String.valueOf(host.getCPUUsage())+" " +String.valueOf(host.getMemoryUsage()));
                     }
-
                 }
+                */
 
-*/
+
+
             } catch (Exception ex) {
 
                 if (Consts.EXCEPTIONS) {
@@ -1042,18 +1083,28 @@ public class HostAgent extends Agent {
 
                 dataCenterHostsInformation = (Map<String, ArrayList<HostDescription>>) msg.getContentObject();
 
+                ArrayList<HostDescription> coalitionMembers = dataCenterHostsInformation.get(hostDescription.getMyLeader());
+
+                int[] thresholds = {0, configuration.getTARGET_STD_DEV(), 0, configuration.getTARGET_STD_DEV()};
+                if (coalitionMembers != null) {
+                    if (coalitionMembers.size() > 0) {
+                        thresholds = calculateNewThresholds(coalitionMembers);
+                    }
+                }
+                hostDescription.setLowMigrationThresholdForCPU(thresholds[0]);
+                hostDescription.setHighMigrationThresholdForCPU(thresholds[1]);
+                hostDescription.setLowMigrationThresholdForMemory(thresholds[2]);
+                hostDescription.setHighMigrationThresholdForMemory(thresholds[3]);
+
                 /*
-                // iterating through key/value mappings
-                System.out.println(hostDescription.getId()+"'s Entries: ");
-                for(Entry<String, ArrayList<HostDescription>> entry: dataCenterHostsInformation.entrySet()) {
-                    System.out.println(hostDescription.getId()+" ------ " + entry.getKey());
+                System.out.println("******************" + hostDescription.getId()+"'s Entries: ");
+                for(Map.Entry<String, ArrayList<HostDescription>> entry: dataCenterHostsInformation.entrySet()) {
+                    System.out.println("******************" + hostDescription.getId()+" ------ " + entry.getKey());
                     for (HostDescription host : entry.getValue()) {
-                        System.out.println(hostDescription.getId()+" ------ " + host.getId()+" " + String.valueOf(host.getCPUUsage())+" " +String.valueOf(host.getMemoryUsage())+ " "+ host.isFailed()) ;
+                        System.out.println("******************" + hostDescription.getId()+" ------ " + host.getId()+" " + String.valueOf(host.getCPUUsage())+" " +String.valueOf(host.getMemoryUsage())+ " "+ host.isFailed()) ;
                     }
 
-                }
-                 */
-
+                } */
 
             } catch (Exception ex) {
 
@@ -1124,7 +1175,7 @@ public class HostAgent extends Agent {
                 return;
             }
             try {
-                System.out.println(msg.getContent());
+                //System.out.println(msg.getContent());
                 if (msg.getContent().equals("FAILED")) {
                     failed = true;
                     hostDescription.setFailed(true);
@@ -1205,6 +1256,7 @@ public class HostAgent extends Agent {
                 //System.out.println("-------"+json);
                 send(msg);
             } catch (Exception e) {
+                System.out.println("Hey dsadas223" + e);
                 if (Consts.EXCEPTIONS) System.out.println("Hey 1143242" + e);
             }
         }
@@ -1611,13 +1663,31 @@ public class HostAgent extends Agent {
                              * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                              * */
                             String coalitionIdForLoadBalancing = "";
-                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                            } else {
-                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                            }
-                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, coalitionIdForLoadBalancing));
+                            coalitionIdForLoadBalancing = requestDecision();
 
+                            //System.out.println("I should start a VM migration from A to B");
+                            if ((coalitionToHostAgents != null) && (coalitionLeaders != null) && (dataCenterHostsInformation != null)) {
+                                /////////// Randomly selecting a destination HostAgent and a VM.
+                                //System.out.println("A0");
+                                //String coalitionId = coalitionLeaders.get(new Random().nextInt(coalitionToHostAgents.size()));
+                                String coalitionId = coalitionIdForLoadBalancing;
+                                //System.out.println("A1");
+                                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(coalitionId);
+                                //System.out.println("A2");
+                                HostDescription destinationHost = dataCenterHostsInformation.get(coalitionId).get(new Random().nextInt(coalitionMembers.size()));
+                                //System.out.println("A3");
+                                //System.out.println("DestinationHost " + destinationHost);
+
+                                VirtualMachineDescription selectedVM = new VirtualMachineDescription();
+                                if (hostDescription.getVirtualMachinesHosted().size() > 0) {
+                                    selectedVM = hostDescription.getVirtualMachinesHosted().get(new Random().nextInt(hostDescription.getVirtualMachinesHosted().size()));
+                                }
+
+                                Decision decision = new Decision(hostDescription, destinationHost, selectedVM, Consts.DECISION_TYPE_MIGRATE_FROM_A_TO_B);
+                                ///////////////////////////////////////////////////////////////
+
+                                agt.addBehaviour(new InitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, decision));
+                            }
                         } else if ((thresholdViolationCounterForHighMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_HIGH_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
@@ -1634,13 +1704,32 @@ public class HostAgent extends Agent {
                              * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                              * */
                             String coalitionIdForLoadBalancing = "";
-                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                            } else {
-                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                            }
-                            agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, coalitionIdForLoadBalancing));
+                            coalitionIdForLoadBalancing = requestDecision();
 
+                            //System.out.println("I should start a VM migration from A to B");
+                            if ((coalitionToHostAgents != null) && (coalitionLeaders != null) && (dataCenterHostsInformation != null)) {
+                                /////////// Randomly selecting a destination HostAgent and a VM.
+                                //System.out.println("B0");
+                                // String coalitionId = coalitionLeaders.get(new Random().nextInt(coalitionToHostAgents.size()));
+                                String coalitionId = coalitionIdForLoadBalancing;
+                                //System.out.println("B1");
+                                ArrayList<String> coalitionMembers = coalitionToHostAgents.get(coalitionId);
+                                //System.out.println("B2");
+                                HostDescription destinationHost = dataCenterHostsInformation.get(coalitionId).get(new Random().nextInt(coalitionMembers.size()));
+                                //System.out.println("B3");
+                                System.out.println("DestinationHost " + destinationHost);
+
+                                VirtualMachineDescription selectedVM = new VirtualMachineDescription();
+                                if (hostDescription.getVirtualMachinesHosted().size() > 0) {
+                                    selectedVM = hostDescription.getVirtualMachinesHosted().get(new Random().nextInt(hostDescription.getVirtualMachinesHosted().size()));
+                                }
+
+                                Decision decision = new Decision(hostDescription, destinationHost, selectedVM, Consts.DECISION_TYPE_MIGRATE_FROM_A_TO_B);
+                                ///////////////////////////////////////////////////////////////
+
+                                agt.addBehaviour(new InitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, decision));
+                                //agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, coalitionIdForLoadBalancing));
+                            }
                         } else if ((thresholdViolationCounterForLowCPU >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_CPU) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                             hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
                             resetCounters();
@@ -1657,11 +1746,7 @@ public class HostAgent extends Agent {
                              * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                              * */
                             String coalitionIdForLoadBalancing = "";
-                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                            } else {
-                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                            }
+                            coalitionIdForLoadBalancing = requestDecision();
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU, coalitionIdForLoadBalancing));
 
                         } else if ((thresholdViolationCounterForLowMemory >= Consts.MAX_THRESHOLD_VIOLATION_COUNTER_FOR_LOW_MEMORY) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
@@ -1680,11 +1765,7 @@ public class HostAgent extends Agent {
                              * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                              * */
                             String coalitionIdForLoadBalancing = "";
-                            if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                            } else {
-                                coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                            }
+                            coalitionIdForLoadBalancing = requestDecision();
                             agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY, coalitionIdForLoadBalancing));
                         }
 
@@ -1725,13 +1806,33 @@ public class HostAgent extends Agent {
                                  * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                                  * */
                                 String coalitionIdForLoadBalancing = "";
-                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                                } else {
-                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                                }
-                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, coalitionIdForLoadBalancing));
+                                coalitionIdForLoadBalancing = requestDecision();
 
+                                //System.out.println("I should start a VM migration from A to B");
+                                if ((coalitionToHostAgents != null) && (coalitionLeaders != null) && (dataCenterHostsInformation != null)) {
+                                    /////////// Randomly selecting a destination HostAgent and a VM.
+                                    //System.out.println("C0");
+                                    //String coalitionId = coalitionLeaders.get(new Random().nextInt(coalitionToHostAgents.size()));
+                                    String coalitionId = coalitionIdForLoadBalancing;
+                                            //System.out.println("C1");
+                                    ArrayList<String> coalitionMembers = coalitionToHostAgents.get(coalitionId);
+                                    //System.out.println("C2 " + coalitionId );
+                                    //System.out.println(dataCenterHostsInformation.get(coalitionId));
+                                    //System.out.println("C2.5 " + coalitionId );
+                                    HostDescription destinationHost = dataCenterHostsInformation.get(coalitionId).get(new Random().nextInt(coalitionMembers.size()));
+                                    //System.out.println("C3");
+                                    //System.out.println("DestinationHost " + destinationHost);
+
+                                    VirtualMachineDescription selectedVM = new VirtualMachineDescription();
+                                    if (hostDescription.getVirtualMachinesHosted().size() > 0) {
+                                        selectedVM = hostDescription.getVirtualMachinesHosted().get(new Random().nextInt(hostDescription.getVirtualMachinesHosted().size()));
+                                    }
+
+                                    Decision decision = new Decision(hostDescription, destinationHost, selectedVM, Consts.DECISION_TYPE_MIGRATE_FROM_A_TO_B);
+                                    ///////////////////////////////////////////////////////////////
+                                    agt.addBehaviour(new InitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, decision));
+                                    //agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_CPU, coalitionIdForLoadBalancing));
+                                }
 
                             } else if ((averageMemoryUsage > hostDescription.getHighMigrationThresholdForMemory()) && Consts.BALANCE_MEMORY && (hostDescription.getVirtualMachinesHosted().size() > 0) && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
@@ -1751,12 +1852,31 @@ public class HostAgent extends Agent {
                                  * */
 
                                 String coalitionIdForLoadBalancing = "";
-                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                                } else {
-                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
+                                coalitionIdForLoadBalancing = requestDecision();
+                                if ((coalitionToHostAgents != null) && (coalitionLeaders != null) && (dataCenterHostsInformation != null)) {
+                                /////////// Randomly selecting a destination HostAgent and a VM.
+                                    //System.out.println("D0");
+                                    //String coalitionId = coalitionLeaders.get(new Random().nextInt(coalitionToHostAgents.size()));
+                                    String coalitionId = coalitionIdForLoadBalancing;
+                                    //System.out.println("D1");
+                                    ArrayList<String> coalitionMembers = coalitionToHostAgents.get(coalitionId);
+                                    //System.out.println("D2");
+                                    HostDescription destinationHost = dataCenterHostsInformation.get(coalitionId).get(new Random().nextInt(coalitionMembers.size()));
+                                    //System.out.println("D3");
+                                    //System.out.println("DestinationHost " + destinationHost);
+
+                                VirtualMachineDescription selectedVM = new VirtualMachineDescription();
+                                if (hostDescription.getVirtualMachinesHosted().size() > 0) {
+                                    selectedVM = hostDescription.getVirtualMachinesHosted().get(new Random().nextInt(hostDescription.getVirtualMachinesHosted().size()));
                                 }
-                                agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, coalitionIdForLoadBalancing));
+
+                                Decision decision =  new Decision(hostDescription, destinationHost, selectedVM, Consts.DECISION_TYPE_MIGRATE_FROM_A_TO_B);
+                                ///////////////////////////////////////////////////////////////
+
+                                agt.addBehaviour(new InitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, decision));
+                                //agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingAtoB(agt, Consts.MIGRATION_CAUSE_HIGH_MEMORY, coalitionIdForLoadBalancing));
+
+                                }
 
                             } else if ((averageCPUUsage < hostDescription.getLowMigrationThresholdForCPU()) && Consts.BALANCE_CPU && (!hostDescription.isInProgress())) {
                                 hostDescription.setInProgress(true); // to be released once the load balancing algorithm has been executed.
@@ -1775,11 +1895,7 @@ public class HostAgent extends Agent {
                                  * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                                  * */
                                 String coalitionIdForLoadBalancing = "";
-                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                                } else {
-                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                                }
+                                coalitionIdForLoadBalancing = requestDecision();
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_CPU, coalitionIdForLoadBalancing));
 
                             } else if ((averageMemoryUsage < hostDescription.getLowMigrationThresholdForMemory()) && Consts.BALANCE_MEMORY && (!hostDescription.isInProgress())) {
@@ -1799,11 +1915,7 @@ public class HostAgent extends Agent {
                                  * Verify whether the agent will migrate the VM within its coalition or other external coalition.
                                  * */
                                 String coalitionIdForLoadBalancing = "";
-                                if (Consts.ONLY_INTRA_LOAD_BALANCING) {
-                                    coalitionIdForLoadBalancing = hostDescription.getMyLeader();
-                                } else {
-                                    coalitionIdForLoadBalancing = selectCoalitionForLoadbalancing();
-                                }
+                                coalitionIdForLoadBalancing = requestDecision();
                                 agt.addBehaviour(new CNPInitiatorForIntraLoadBalancingBtoA(agt, Consts.MIGRATION_CAUSE_LOW_MEMORY, coalitionIdForLoadBalancing));
 
                             }
@@ -1829,74 +1941,45 @@ public class HostAgent extends Agent {
     // Each ACLMessage contains a host description including its virtual machines. To access message content:
     // ACLMessage msg = (ACLMessage) e.nextElement();
     // (HostDescription)msg.getContentObject()
-    private double mean(Vector responses, String resource) {
-
+    private double mean(ArrayList<HostDescription> hosts, String resource) {
         double sum = 0.0;
-
-        if (resource.toLowerCase().equals("cpu")) { // This is to take into account the resource usage of the INITIATOR host agent 
-            sum = hostDescription.getCPUUsage();
-        } else if (resource.toLowerCase().equals("memory")) {
-            sum = hostDescription.getMemoryUsage();
-        }
-        HostDescription participantHost;
-        for (int i = 0; i < responses.size(); i++) {
-            try {
-                participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
-                if (resource.toLowerCase().equals("cpu")) {
-                    sum += participantHost.getCPUUsage();
-                } else if (resource.toLowerCase().equals("memory")) {
-                    sum += participantHost.getMemoryUsage();
-                }
-            } catch (Exception ex) {
-                if (Consts.EXCEPTIONS) {
-                    System.out.println("It is here 25" + ex);
-                }
+        for (int i = 0; i < hosts.size(); i++) {
+            HostDescription aHost = hosts.get(i);
+            if (resource.toLowerCase().equals("cpu")) {
+                sum += aHost.getCPUUsage();
+            } else if (resource.toLowerCase().equals("memory")) {
+                sum += aHost.getMemoryUsage();
             }
         }
-
-        return sum / (responses.size() + 1);
+        return sum / hosts.size();
     }
 
-    private double stdDev(Vector responses, String resource) {
+    private double stdDev(ArrayList<HostDescription> hosts, String resource) {
         double summatory = 0.0;
-
-        double mean = mean(responses, resource);
-
-        if (resource.toLowerCase().equals("cpu")) { // This is to take into account the resource usage of the INITIATOR host agent 
-            summatory = Math.pow(hostDescription.getCPUUsage() - mean, 2);
-        } else if (resource.toLowerCase().equals("memory")) {
-            summatory = Math.pow(hostDescription.getMemoryUsage() - mean, 2);
-        }
-        HostDescription participantHost;
-        for (int i = 0; i < responses.size(); i++) {
-            try {
-                participantHost = (HostDescription) ((ACLMessage) responses.get(i)).getContentObject();
-                if (resource.toLowerCase().equals("cpu")) {
-                    summatory += Math.pow(participantHost.getCPUUsage() - mean, 2);
-                } else if (resource.toLowerCase().equals("memory")) {
-                    summatory += Math.pow(participantHost.getMemoryUsage() - mean, 2);
-                }
-            } catch (UnreadableException ex) {
-                if (Consts.EXCEPTIONS) {
-                    System.out.println("It is here 26" + ex);
-                }
+        double mean = mean(hosts, resource);
+        for (int i = 0; i < hosts.size(); i++) {
+            HostDescription aHost = hosts.get(i);
+            if (resource.toLowerCase().equals("cpu")) {
+                summatory += Math.pow(aHost.getCPUUsage() - mean, 2);
+            } else if (resource.toLowerCase().equals("memory")) {
+                summatory += Math.pow(aHost.getMemoryUsage() - mean, 2);
             }
         }
-        return Math.sqrt(summatory / (responses.size() + 1));
+        return Math.sqrt(summatory / hosts.size());
     }
 
-    private int[] calculateNewThresholds(Vector responses) {
+    private int[] calculateNewThresholds(ArrayList<HostDescription> hosts) {
         int[] thresholds = new int[4];
         // thresholds[0]  low CPU 
         // thresholds[1]  high CPU 
         // thresholds[2]  low Memory 
         // thresholds[3]  high Memory
 
-        thresholds[0] = (int) Math.round(mean(responses, "CPU")) - configuration.getTARGET_STD_DEV();
-        thresholds[1] = (int) Math.round(mean(responses, "CPU")) + configuration.getTARGET_STD_DEV();
+        thresholds[0] = (int) Math.round(mean(hosts, "CPU")) - configuration.getTARGET_STD_DEV();
+        thresholds[1] = (int) Math.round(mean(hosts, "CPU")) + configuration.getTARGET_STD_DEV();
 
-        thresholds[2] = (int) Math.round(mean(responses, "Memory")) - configuration.getTARGET_STD_DEV();
-        thresholds[3] = (int) Math.round(mean(responses, "Memory")) + configuration.getTARGET_STD_DEV();
+        thresholds[2] = (int) Math.round(mean(hosts, "Memory")) - configuration.getTARGET_STD_DEV();
+        thresholds[3] = (int) Math.round(mean(hosts, "Memory")) + configuration.getTARGET_STD_DEV();
 
         for (int i = 0; i < thresholds.length; i++) {
             if (thresholds[i] > 100) {
@@ -1906,7 +1989,6 @@ public class HostAgent extends Agent {
                 thresholds[i] = 0;
             }
         }
-
         return thresholds;
     }
 
@@ -2093,7 +2175,7 @@ public class HostAgent extends Agent {
                             int[] thresholds = {0, configuration.getTARGET_STD_DEV(), 0, configuration.getTARGET_STD_DEV()};
 
                             if (responsesFromNotFailedHAs.size() > 0) {
-                                thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
+                                //thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
                             }
                             // thresholds[0]  low CPU
                             decision.setLowMigrationThresholdForCPU(thresholds[0]);
@@ -2172,7 +2254,7 @@ public class HostAgent extends Agent {
                                 hostDescription.setInProgress(false);
 
                             }
-                        } else { // if no agent replied to the cfp, unlock vm 
+                        } else { // if no agent replied to the cfp, unlock vm
                             if (!Consts.LOG) {
                                 System.out.println("No agent replied to cfp. Load balancing cause " + loadBalancingCause);
                             }
@@ -2211,6 +2293,113 @@ public class HostAgent extends Agent {
                         }
 
                     }
+
+                });
+
+            } catch (Exception ex) {
+                if (Consts.EXCEPTIONS) {
+                    System.out.println("It is here" + ex);
+                }
+            }
+
+        }
+
+    }
+
+
+    private class InitiatorForIntraLoadBalancingAtoB extends OneShotBehaviour { // Initiator of Contract Net Protocol for VM Migration
+
+        private Agent agt;
+        private Decision decision;
+        private int loadBalancingCause;
+        private int numberOfPotentialRespondents;
+        private ACLMessage ProposalForLoadBalancing;
+
+        public InitiatorForIntraLoadBalancingAtoB(Agent agt, int loadBalancingCause, Decision decision) {
+            super(null);
+            this.loadBalancingCause = loadBalancingCause;
+            this.agt = agt;
+            this.decision = decision;
+
+        }
+
+        @Override
+        public void action() {
+            try {
+
+                ProposalForLoadBalancing = new ACLMessage(ACLMessage.PROPOSE);
+                numberOfPotentialRespondents = 1;
+                ProposalForLoadBalancing.setSender(agt.getAID());
+                ProposalForLoadBalancing.setConversationId(Consts.CONVERSATION_LOAD_BALANCING_A_TO_B);
+                ProposalForLoadBalancing.setContentObject(String.valueOf(loadBalancingCause));
+                ProposalForLoadBalancing.setReplyWith(String.valueOf(agt.getLocalName() + "-" + String.valueOf(conversationId)));
+                ProposalForLoadBalancing.setProtocol(FIPANames.InteractionProtocol.FIPA_PROPOSE);
+                ProposalForLoadBalancing.setReplyByDate(new Date(System.currentTimeMillis() + Consts.TIMEOUT_FOR_CNP_INITIATOR_FOR_LOAD_BALANCING));
+
+                ProposalForLoadBalancing.addReceiver(new AID(decision.getDestinationHost().getId(), AID.ISLOCALNAME));
+
+                //System.out.println("****** Initiator for intra load balancing from A to B " + agt.getLocalName()+ " " + decision.getSourceHost().getId() + " " + decision.getDestinationHost().getId()+ " " + decision.getSelectedVM().getId());
+
+                conversationId++;
+
+                addBehaviour(new ProposeInitiator(agt, ProposalForLoadBalancing) {
+                    @Override
+                    protected void handleNotUnderstood(ACLMessage notUnderstood) {
+                        hostDescription.setInProgress(false);
+                    }
+
+                    @Override
+                    protected void handleOutOfSequence(ACLMessage notUnderstood) {
+                        hostDescription.setInProgress(false);
+                    }
+
+                    @Override
+                    protected void handleRejectProposal(ACLMessage rejection) {
+                        resetAverageUsages();
+                        resetCounters();
+                        resetThresholdFlags();
+                        hostDescription.setInProgress(false);
+                        //System.out.println(hostDescription.getId() + "Thanks anyway");
+                    }
+
+                    @Override
+                    protected void handleAcceptProposal(ACLMessage acceptance) {
+                        //System.out.println(hostDescription.getId() + " Thanks for accepting");
+                        if ((loadBalancingCause == Consts.MIGRATION_CAUSE_HIGH_CPU) || (loadBalancingCause == Consts.MIGRATION_CAUSE_HIGH_MEMORY)) { // it means this HostAgent will migrate one of his VMs to other HostAgents
+                            //System.out.println("Agent " + acceptance.getSender().getName() + " just confirmed that it will host the VM and that sufficient resources have been allocated");
+                            decision.getSelectedVM().setContainerName(acceptance.getContent());
+                            decision.getSelectedVM().setPreviousOwnerId(hostDescription.getId());
+                            decision.getSelectedVM().setOwnerId(acceptance.getSender().getLocalName());
+                            //System.out.println();
+                            operationOverVM(decision.getSelectedVM(), "removeAndMigrate", "AtoB", null, null);
+                            if (configuration.isBALANCING_ONLY_ONE_COALITION_AT_A_TIME())
+                                agt.addBehaviour(new ResetDatacenterLoadBalancingCounters(agt));
+                            resetAverageUsages();
+                            resetCounters();
+                            resetThresholdFlags();
+                        } else {
+                            if (!Consts.LOG) {
+                                System.out.println("ERROR: Unknown load balancing cause");
+                            }
+                            resetAverageUsages();
+                            resetCounters();
+                            resetThresholdFlags();
+                            hostDescription.setInProgress(false);
+                        }
+                    }
+
+                    @Override
+                    protected void handleAllResponses(Vector responses) {
+                        if (responses.size() < numberOfPotentialRespondents) {
+                            System.out.println(agt.getName() + " --- Timeout expired: missing " + (numberOfPotentialRespondents - responses.size()) + " responses");
+                            System.out.println(hostDescription.getId() + " handleAllResponses has been executed");
+                            resetAverageUsages();
+                            resetCounters();
+                            resetThresholdFlags();
+                            hostDescription.setInProgress(false);
+                        }
+                    }
+
 
                 });
 
@@ -2341,7 +2530,7 @@ public class HostAgent extends Agent {
                             int[] thresholds = {0, configuration.getTARGET_STD_DEV(), 0, configuration.getTARGET_STD_DEV()};
 
                             if (responsesFromNotFailedHAs.size() > 0) {
-                                thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
+                                //thresholds = calculateNewThresholds(responsesFromNotFailedHAs);
                             }
                             decision.setLowMigrationThresholdForCPU(thresholds[0]);
                             decision.setHighMigrationThresholdForCPU(thresholds[1]);
@@ -2665,6 +2854,39 @@ public class HostAgent extends Agent {
                             System.out.println("It is here 5: " + ex);
                         }
                     }
+                }
+            });
+        }
+    }
+    private class ParticipantForIntraLoadBalancingAtoB extends OneShotBehaviour {
+
+        private Agent agt;
+
+        public ParticipantForIntraLoadBalancingAtoB(Agent agt) {
+            this.agt = agt;
+        }
+
+        @Override
+        public synchronized void action() {
+            //System.out.println("Agent " + getLocalName() + " waiting for Proposal for Intra Load Balancing from A to B ...");
+
+            MessageTemplate subtemplate = MessageTemplate.and(MessageTemplate.MatchProtocol(FIPANames.InteractionProtocol.FIPA_PROPOSE), MessageTemplate.MatchConversationId(Consts.CONVERSATION_LOAD_BALANCING_A_TO_B));
+            MessageTemplate template = MessageTemplate.and(subtemplate, MessageTemplate.MatchPerformative(ACLMessage.PROPOSE));
+
+            addBehaviour(new ProposeResponder(agt, template) {
+                @Override
+                protected ACLMessage prepareResponse(ACLMessage propose) {
+                    ACLMessage result = propose.createReply();
+                    if (Math.random() > 0.5) {
+                        result.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+                        result.setContent("Hi" + propose.getSender() + " from " + hostDescription.getId());
+                        //System.out.println("-------- ACCEPTING "  + "Hi" + propose.getSender() + " from " + hostDescription.getId());
+                    } else {
+                        result.setPerformative(ACLMessage.REJECT_PROPOSAL);
+                        result.setContent("Hi" + propose.getSender() + " from " + hostDescription.getId());
+                        //System.out.println("--------REJECTING "  + "Hi" + propose.getSender() + " from " + hostDescription.getId());
+                    }
+                    return result;
                 }
             });
         }
