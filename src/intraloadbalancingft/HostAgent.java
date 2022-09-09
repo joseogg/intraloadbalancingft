@@ -288,16 +288,24 @@ public class HostAgent extends Agent {
         // also sends the time window
         // also sends the time window
 
-        // removing old failure record
-        // removing old failure record
-        // removing old failure record
-        // removing old failure record
-        // removing old failure record
-        // removing old failure record
-
         DecisionRequest producer = new DecisionRequest();
 
-        DataCenterInformation information = new DataCenterInformation(dataCenterHostsInformation, dataCenterFailures);
+        for (Map.Entry<String, Map<String, ArrayList<FailureRecord>>> entry : dataCenterFailures.entrySet()){
+            System.out.println("Key = " + entry.getKey() + ", Value = " + entry.getValue());
+            for (Map.Entry<String, ArrayList<FailureRecord>> subEntry : entry.getValue().entrySet()){
+                System.out.println("----------Key = " + subEntry.getKey() + ", Value = " + subEntry.getValue());
+                ArrayList<FailureRecord> failures = subEntry.getValue();
+                int i = 0;
+                while (i < failures.size()) {
+                    if (((FailureRecord)failures.get(i)).getEndFailure() <  System.currentTimeMillis() - Consts.MAXIMUM_FAILURE_HISTORY) {
+                        failures.remove(i);
+                    }
+                    i++;
+                }
+            }
+        }
+
+        DataCenterInformation information = new DataCenterInformation(dataCenterHostsInformation, dataCenterFailures, Consts.TIME_WINDOW, System.currentTimeMillis());
         String json = new Gson().toJson(information);
         System.out.println(json);
         producer.produceMessages(json);

@@ -6,12 +6,16 @@ import java.util.Map;
 
 public class DataCenterInformation implements Serializable {
 
+
     private Map<String, ArrayList<HostDescription>> dataCenterHostsInformation; // coalition id, list of hosts' descriptions
     private Map<String, Map<String, ArrayList<FailureRecord>>> dataCenterFailures;
-
-    public DataCenterInformation(Map<String, ArrayList<HostDescription>> dataCenterHostsInformation, Map<String, Map<String, ArrayList<FailureRecord>>> dataCenterFailures) {
+    private long timeWindow;
+    private long currentTime;
+    public DataCenterInformation(Map<String, ArrayList<HostDescription>> dataCenterHostsInformation, Map<String, Map<String, ArrayList<FailureRecord>>> dataCenterFailures, long timeWindow, long currentTime) {
         this.dataCenterHostsInformation = dataCenterHostsInformation;
         this.dataCenterFailures = dataCenterFailures;
+        this.timeWindow = timeWindow;
+        this.currentTime = currentTime;
     }
 
 
