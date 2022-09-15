@@ -281,19 +281,13 @@ public class HostAgent extends Agent {
     }
 
     private String requestDecision() {
-        // also sends the time window
-        // also sends the time window
-        // also sends the time window
-        // also sends the time window
-        // also sends the time window
-        // also sends the time window
 
         DecisionRequest producer = new DecisionRequest();
 
         for (Map.Entry<String, Map<String, ArrayList<FailureRecord>>> entry : dataCenterFailures.entrySet()){
-            System.out.println("Key = " + entry.getKey() + ", Value = " + entry.getValue());
+            //System.out.println("Key = " + entry.getKey() + ", Value = " + entry.getValue());
             for (Map.Entry<String, ArrayList<FailureRecord>> subEntry : entry.getValue().entrySet()){
-                System.out.println("----------Key = " + subEntry.getKey() + ", Value = " + subEntry.getValue());
+                //System.out.println("----------Key = " + subEntry.getKey() + ", Value = " + subEntry.getValue());
                 ArrayList<FailureRecord> failures = subEntry.getValue();
                 int i = 0;
                 while (i < failures.size()) {
