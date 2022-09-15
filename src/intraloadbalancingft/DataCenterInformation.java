@@ -34,6 +34,7 @@ public class DataCenterInformation implements Serializable {
         this.dataCenterFailures = dataCenterFailures;
         this.timeWindow = timeWindow;
         this.currentTime = currentTime;
+        //
     }
 /*
 

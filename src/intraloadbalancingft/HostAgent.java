@@ -91,7 +91,7 @@ public class HostAgent extends Agent {
         hostsFailures = new HashMap<String, ArrayList<FailureRecord>>();
         dataCenterHostsInformation = new HashMap<String, ArrayList<HostDescription>>();
         internalHostsInformation = new ArrayList<HostDescription>();
-
+//
 
         hostAgentToCoalition = new HashMap<String, String>();
         failed = false;
