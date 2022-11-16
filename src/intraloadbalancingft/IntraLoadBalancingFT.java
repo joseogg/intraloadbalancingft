@@ -77,14 +77,7 @@ public class IntraLoadBalancingFT {
                     defaultArgs[8] = "results";
                     defaultArgs[9] = "0";
 
-                    configuration = new ExperimentRunConfiguration(Integer.valueOf(defaultArgs[2]),
-                            Integer.valueOf(defaultArgs[3]),
-                            defaultArgs[4],
-                            Integer.valueOf(defaultArgs[5]), 0,
-                            Integer.valueOf(defaultArgs[2]), 0,
-                            Integer.valueOf(defaultArgs[2]),
-                            defaultArgs[6],
-                            Integer.valueOf(defaultArgs[9]));
+                    configuration = new ExperimentRunConfiguration(Integer.valueOf(defaultArgs[2]), Integer.valueOf(defaultArgs[3]), defaultArgs[4], Integer.valueOf(defaultArgs[5]), 0, Integer.valueOf(defaultArgs[2]), 0, Integer.valueOf(defaultArgs[2]), defaultArgs[6], Integer.valueOf(defaultArgs[9]));
 
                     if (configuration.getLOAD_BALANCING_TYPE() == Consts.DISTRIBUTED_FIXED_COALITIONS) {
                         fileSufix = defaultArgs[0] + "_" + defaultArgs[1] + "_" + defaultArgs[2] + "_" + defaultArgs[3] + "_" + defaultArgs[4] + "_" + defaultArgs[5] + "_" + defaultArgs[6] + "_" + defaultArgs[7] + "_" + defaultArgs[8];
@@ -115,7 +108,6 @@ public class IntraLoadBalancingFT {
             // Reading datacenter's structure from a xml file
             // Reading datacenter's structure from a xml file
             // Reading datacenter's structure from a xml file
-
 
             ArrayList<HostAndNeighbors> dataCenterStructure;
             //String XML_FILE = "DCellCoalitionTest.XML";

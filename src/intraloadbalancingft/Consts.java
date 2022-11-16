@@ -206,14 +206,14 @@ u-24tb1.metal 	448 	24576
     public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
 
     ////// **** Constants for Failure Management **** ///////
-    public static final boolean FAILURES_ARE_ENABLED = true;
+    public static final boolean FAILURES_ARE_ENABLED = false;
     public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
     public static final long TICKS_FOR_SWITCH_FAILURE_GENERATION = 1000; // ms
     public static final long TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS = 1000;
     public static final double FAILURE_PROBABILITY = 0.01;
     public static final double MEAN_FAILURE_DURATION = 5; // seconds
     public static final double STD_DEV_FAILURE_DURATION = 2;  // seconds
-    public static final long MAXIMUM_FAILURE_HISTORY = 10000; // ms
+    public static final long MAXIMUM_FAILURE_HISTORY = 100000000; // ms
 
     public static final long TIME_WINDOW = 10000; // ms  This time window is to support time series forecasting
 

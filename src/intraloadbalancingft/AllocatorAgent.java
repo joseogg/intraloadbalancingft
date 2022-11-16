@@ -290,8 +290,7 @@ public class AllocatorAgent extends Agent {
                             numberOfContinuousMigrations = 0;
                             VMWAREkeepMigrating = false;
                             //currentTick = -1;
-                        } else if (((avgCPUStdDev <= configuration.getTARGET_STD_DEV()) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_CPU_LOAD) ||
-                                ((avgMemoryStdDev <= configuration.getTARGET_STD_DEV()) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_MEMORY_LOAD)) {
+                        } else if (((avgCPUStdDev <= configuration.getTARGET_STD_DEV()) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_CPU_LOAD) || ((avgMemoryStdDev <= configuration.getTARGET_STD_DEV()) && VMWAREkeepMigrating && Consts.VMWARE_BALANCE_MEMORY_LOAD)) {
                             numberOfContinuousMigrations = 0;
                             VMWAREkeepMigrating = false;
                             //currentTick = -1;
@@ -448,8 +447,7 @@ public class AllocatorAgent extends Agent {
                         if (host.getVirtualMachinesHosted().get(i) != null)
                             aDeepCopyOfHost.getVirtualMachinesHosted().add(deepCopyVM(host.getVirtualMachinesHosted().get(i)));
                     } catch (Exception ex) {
-                        if (Consts.EXCEPTIONS)
-                            System.out.println(ex);
+                        if (Consts.EXCEPTIONS) System.out.println(ex);
                     }
                 }
 //                for (VirtualMachineDescription vm : host.getVirtualMachinesHosted()) {  
@@ -547,9 +545,7 @@ public class AllocatorAgent extends Agent {
 //            for (VirtualMachineDescription vm : currentVMs) {
                 for (int j = 0; j < safeHosts.size(); j++) {
 //                for (HostDescription host : safeHosts) {
-                    if ((currentVMs.get(i).getNumberOfVirtualCores() <= safeHosts.get(j).getAvailableVirtualCores())
-                            && (currentVMs.get(i).getMemory() <= safeHosts.get(j).getAvailableMemory())
-                            && (!currentVMs.get(i).getOwnerId().trim().equals(safeHosts.get(j).getId().trim()))) {
+                    if ((currentVMs.get(i).getNumberOfVirtualCores() <= safeHosts.get(j).getAvailableVirtualCores()) && (currentVMs.get(i).getMemory() <= safeHosts.get(j).getAvailableMemory()) && (!currentVMs.get(i).getOwnerId().trim().equals(safeHosts.get(j).getId().trim()))) {
 
 
                         HostDescription possiblySelectedDestinationHost = deepCopyHost(safeHosts.get(j));

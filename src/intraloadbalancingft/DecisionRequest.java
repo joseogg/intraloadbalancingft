@@ -7,7 +7,6 @@ package intraloadbalancingft;
         import javax.jms.MessageProducer;
         import javax.jms.Session;
         import javax.jms.TextMessage;
-
         import org.apache.activemq.ActiveMQConnection;
         import org.apache.activemq.ActiveMQConnectionFactory;
 

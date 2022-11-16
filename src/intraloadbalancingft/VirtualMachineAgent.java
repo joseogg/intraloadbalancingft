@@ -34,6 +34,8 @@ public class VirtualMachineAgent extends Agent {
 
     private double currentMemoryUsage;
 
+    private boolean recentlyMigrated = false; //erase this attribute, it's just for debugging purposes.
+
     @Override
     protected void setup() {
         Object[] args = getArguments();
@@ -52,6 +54,14 @@ public class VirtualMachineAgent extends Agent {
     protected void beforeMove() {
         //virtualMachineDescription.setPreviousOwnerId(MSG_QUEUE_CLASS);
         if (!Consts.LOG) System.out.println(getLocalName() + " BEFORE migration");
+
+        if (recentlyMigrated == false) {
+            jade.core.Location location = this.here();
+            String name = location.getName();
+            //System.out.println("**** BEFOREMOVE I am " + this.getName() +" hosted at " + name);
+            recentlyMigrated = true;
+        }
+
         reportToOwner = false;
     }
 
@@ -60,6 +70,12 @@ public class VirtualMachineAgent extends Agent {
         if (!Consts.LOG) System.out.println(getLocalName() + " AFTER migration");
         reportToOwner = true;
         addBehaviour(new RegisterWithNewOwner(this));
+        if (recentlyMigrated == true) {
+            jade.core.Location location = this.here();
+            String name = location.getName();
+            //System.out.println("**** AFTERMOVE I am " + this.getName() +" hosted at " + name);
+        }
+
     }
 
     @Override
@@ -189,11 +205,19 @@ public class VirtualMachineAgent extends Agent {
             try {
                 vm = (VirtualMachineDescription) msg.getContentObject();
                 if (msg.getPerformative() == ACLMessage.REQUEST) {
+
                     virtualMachineDescription.setPreviousOwnerId(vm.getPreviousOwnerId());
                     virtualMachineDescription.setOwnerId(vm.getOwnerId());
+
+                    jade.core.Location location = this.agt.here();
+                    String name = location.getName();
+                    //System.out.println("**** I am " + vm.getId() +" hosted at " + name + " "+ vm.getPreviousOwnerId() + " and about to be migrated to " + vm.getOwnerId()+ " " + vm.getContainerName());
+
                     if (!Consts.LOG)
                         System.out.println("NEW VMA's MIGRATION CODE to " + vm.getContainerName().trim() + " with " + vm.getOwnerId());
-//                    System.out.println("NEW VMA's MIGRATION CODE to " + vm.getContainerName().trim() + " with " + vm.getOwnerId());
+
+
+
                     virtualMachineDescription.setMigrationType(vm.getMigrationType());
 
                     agt.doMove(new ContainerID(vm.getContainerName().trim(), null));
