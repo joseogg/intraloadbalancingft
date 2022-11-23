@@ -86,7 +86,7 @@ public class HostAgent extends Agent {
         coalitionToHostAgents = new HashMap<String, ArrayList<String>>();
 
         failureGeneration = new WeibullFailureGeneration();
-        lifeProgress = 0;
+        lifeProgress = new Random().nextInt(Consts.LIFE_SPAN);
 
         dataCenterFailures = new HashMap<String, Map<String, ArrayList<FailureRecord>>>();
         hostsFailures = new HashMap<String, ArrayList<FailureRecord>>();

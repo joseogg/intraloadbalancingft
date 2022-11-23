@@ -206,7 +206,7 @@ u-24tb1.metal 	448 	24576
     public static final boolean WORKLOAD_GENERATOR_AGENT_GUI = false; // Enable or Disable AllocatorAgent's GUI
 
     ////// **** Constants for Failure Management **** ///////
-    public static final boolean FAILURES_ARE_ENABLED = false;
+    public static final boolean FAILURES_ARE_ENABLED = true;
     public static final String FAILURE_FROM_SWITCH = "FAILURE_FROM_SWITCH";
     public static final long TICKS_FOR_SWITCH_FAILURE_GENERATION = 1000; // ms
     public static final long TICKS_FOR_FAILURE_NOTIFICATION_TO_LEADERS = 1000;
